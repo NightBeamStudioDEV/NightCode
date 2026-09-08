@@ -133,7 +133,7 @@ test("delegates through isolated brokers, enforces ownership, and manages skills
     const p = await page.evaluate(() =>
       window.nightcode.invoke<any>("snapshot").then((s) => s.projects[0]),
     );
-    expect(p.roots).toEqual([root, second]);
+    expect(p.roots).toEqual(await Promise.all([root, second].map((folder) => fs.realpath(folder))));
     await page.evaluate(
       async ({ p, baseURL }) => {
         await window.nightcode.invoke("projects.update", {

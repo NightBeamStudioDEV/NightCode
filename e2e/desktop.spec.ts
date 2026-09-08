@@ -52,7 +52,7 @@ test("welcome, responsive controls, engine, projects and persistence", async () 
     const opened = await page.evaluate(() =>
       window.nightcode.invoke<any>("projects.open"),
     );
-    expect(opened.path.toLowerCase()).toBe(project.toLowerCase());
+    expect(opened.path.toLowerCase()).toBe((await fs.realpath(project)).toLowerCase());
     const session = await page.evaluate(
       (projectId) =>
         window.nightcode.invoke<any>("session.create", { projectId }),
