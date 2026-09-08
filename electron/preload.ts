@@ -1,0 +1,55 @@
+import { contextBridge, ipcRenderer, webUtils } from "electron";
+const allowed = new Set([
+  "snapshot", "tasks.audit",
+  "question.reply",
+  "skills.list",
+  "skills.save",
+  "skills.remove",
+  "projects.update",
+  "projects.remove",
+  "projects.pickFolders",
+  "subagents.messages",
+  "subagents.stop",
+  "skills.load",
+  "goal.set",
+  "queue.update",
+  "preferences.save",
+  "projects.open",
+  "projects.create",
+  "session.create",
+  "session.messages",
+  "session.send",
+  "session.abort",
+  "session.rename",
+  "session.pin",
+  "session.archive",
+  "session.delete",
+  "providers.list",
+  "providers.save",
+  "providers.remove",
+  "attachments.pick",
+  "attachments.validate",
+  "approval.reply",
+  "commands.run",
+  "commands.cancel",
+  "files.list",
+  "files.read",
+  "draft.save",
+  "engine.restart",
+  "window.minimize",
+  "window.maximize",
+  "window.close",
+]);
+contextBridge.exposeInMainWorld("nightcode", {
+  invoke: (action: string, data: unknown) => {
+    if (!allowed.has(action))
+      return Promise.reject(new Error("Unknown action"));
+    return ipcRenderer.invoke("nightcode", action, data);
+  },
+  onEvent: (cb: (event: unknown) => void) => {
+    const listener = (_: unknown, event: unknown) => cb(event);
+    ipcRenderer.on("nightcode:event", listener);
+    return () => ipcRenderer.removeListener("nightcode:event", listener);
+  },
+  filePath: (file: File) => webUtils.getPathForFile(file),
+});

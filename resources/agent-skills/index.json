@@ -1,0 +1,38 @@
+[
+  {
+    "id": "game-director",
+    "description": "Plan and deliver browser games from a brief; choose scope, engine, milestones, and release gates."
+  },
+  {
+    "id": "gameplay-systems",
+    "description": "Implement and tune deterministic game loops, movement, cameras, combat, collisions, and progression."
+  },
+  {
+    "id": "threejs-graphics",
+    "description": "Design cohesive 3D browser-game rendering, lighting, materials, cameras, and effects."
+  },
+  {
+    "id": "game-ui",
+    "description": "Build responsive game menus, HUDs, controls, loading states, and accessible feedback."
+  },
+  {
+    "id": "game-assets",
+    "description": "Prepare and integrate game models, textures, sprites, animation, audio, and asset manifests."
+  },
+  {
+    "id": "game-performance",
+    "description": "Profile browser games and fix frame pacing, loading, memory growth, and input latency."
+  },
+  {
+    "id": "game-qa",
+    "description": "Playtest and release browser games with reproducible functional, visual, performance and build checks."
+  },
+  {
+    "id": "agent-workflow",
+    "description": "Efficiently inspect, implement, verify and hand off coding tasks while preserving user scope."
+  },
+  {
+    "id": "phaser-2d",
+    "description": "Build sprite-based browser games with Phaser scenes, physics, cameras, input and restart-safe lifecycle."
+  }
+]

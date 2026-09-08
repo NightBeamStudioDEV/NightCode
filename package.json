@@ -1,0 +1,107 @@
+{
+  "name": "nightcode-desktop",
+  "version": "0.2.0",
+  "private": true,
+  "description": "A desktop coding workspace with visible progress, reviewable changes, and evidence-backed tasks",
+  "author": "NightBeam Studio",
+  "main": "dist-electron/main.js",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "tsc --noEmit && vite build && node scripts/build.mjs",
+    "start": "npm run build && electron .",
+    "test": "vitest run",
+    "test:e2e": "npm run build && playwright test",
+    "package": "npm run build && electron-builder --win nsis portable",
+    "verify:package": "node scripts/verify-package.cjs",
+    "smoke:package": "node scripts/packaged-smoke.cjs"
+  },
+  "dependencies": {
+    "@fontsource-variable/inter": "^5.3.0",
+    "@opencode-ai/plugin": "1.18.29",
+    "@opencode-ai/sdk": "1.18.29",
+    "diff": "^9.0.0",
+    "ignore": "^7.0.0",
+    "lucide-react": "^0.468.0",
+    "opencode-windows-x64": "1.18.29",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-markdown": "^10.1.0",
+    "sql.js": "^1.13.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.52.0",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@types/sql.js": "^1.4.9",
+    "@vitejs/plugin-react": "^4.5.0",
+    "electron": "43.4.1",
+    "electron-builder": "^26.0.0",
+    "esbuild": "^0.25.0",
+    "prettier": "^3.9.6",
+    "sharp": "^0.35.4",
+    "typescript": "^5.8.0",
+    "vite": "^6.3.0",
+    "vitest": "^3.2.0"
+  },
+  "build": {
+    "npmRebuild": false,
+    "appId": "com.nightcode.desktop",
+    "productName": "NightCode Desktop",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*.js",
+      "package.json",
+      "LICENSE",
+      "THIRD_PARTY_NOTICES.md",
+      "!node_modules/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/icon.png",
+        "to": "icon.png"
+      },
+      {
+        "from": "node_modules/opencode-windows-x64/bin/opencode.exe",
+        "to": "engine/opencode.exe"
+      },
+      {
+        "from": "node_modules/sql.js/dist/sql-wasm.wasm",
+        "to": "sql-wasm.wasm"
+      },
+      {
+        "from": "resources/agent-skills",
+        "to": "agent-skills"
+      },
+      {
+        "from": "resources/licenses",
+        "to": "licenses"
+      }
+    ],
+    "win": {
+      "icon": "resources/icon.ico",
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "signExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/NightBeamStudioDEV/NightCode.git"
+  },
+  "homepage": "https://github.com/NightBeamStudioDEV/NightCode#readme",
+  "bugs": {
+    "url": "https://github.com/NightBeamStudioDEV/NightCode/issues"
+  }
+}

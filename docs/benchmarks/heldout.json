@@ -1,0 +1,33 @@
+{
+  "beforeRun": "2026-09-08T21-04-14-475Z",
+  "afterRun": "2026-09-08T21-44-04-916Z",
+  "rows": [
+    {
+      "task": "semver",
+      "beforeSeconds": 159.753,
+      "afterSeconds": 88.106,
+      "beforePassed": 6,
+      "afterPassed": 6,
+      "beforeCalls": 22,
+      "afterCalls": 23
+    },
+    {
+      "task": "lru",
+      "beforeSeconds": 82.707,
+      "afterSeconds": 79.216,
+      "beforePassed": 6,
+      "afterPassed": 6,
+      "beforeCalls": 16,
+      "afterCalls": 12
+    },
+    {
+      "task": "swept-aabb",
+      "beforeSeconds": 55.265,
+      "afterSeconds": 75.443,
+      "beforePassed": 6,
+      "afterPassed": 6,
+      "beforeCalls": 12,
+      "afterCalls": 14
+    }
+  ]
+}
