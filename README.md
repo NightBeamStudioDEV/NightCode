@@ -8,6 +8,10 @@ NightCode brings provider selection, editable plans, local tools, subagents, and
 
 ![NightCode desktop workspace](docs/images/nightcode-desktop.png)
 
+[![Watch the 47-second NightCode launch film](docs/images/launch-film.png)](https://github.com/NightBeamStudioDEV/NightCode/releases/download/v0.2.0/NightCode-launch-1080p.mp4)
+
+The film uses real app footage; its scripted local agent demonstration is labeled. [Editable Remotion source](marketing/README.md).
+
 ## Get started
 
 1. Download the **Windows x64 installer** or **portable executable** from [Releases](https://github.com/NightBeamStudioDEV/NightCode/releases/latest).
