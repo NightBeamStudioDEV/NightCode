@@ -1,11 +1,13 @@
 import http from "node:http";
 import crypto from "node:crypto";
+import { toolkitTools } from "./toolkit";
 const object = (
   properties: Record<string, unknown>,
   required: string[] = [],
 ) => ({ type: "object", properties, required });
 const string = { type: "string" };
 const extraTools = [
+  ...toolkitTools,
   {
     name: "create_task",
     description:
@@ -333,6 +335,23 @@ export class Broker {
                 rpc.params.name,
                 rpc.params.arguments ?? {},
               );
+              if (
+                value &&
+                typeof value === "object" &&
+                "_nightcodeImage" in value &&
+                (value as any)._nightcodeImage === true
+              ) {
+                result = {
+                  content: [
+                    {
+                      type: "image",
+                      data: (value as any).data,
+                      mimeType: (value as any).mimeType,
+                    },
+                  ],
+                };
+                break;
+              }
               result = {
                 content: [
                   {

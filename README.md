@@ -48,6 +48,24 @@ The app includes Electron, OpenCode, and SQLite. You do not need Node.js to use 
 
 NightCode uses a pinned [OpenCode](https://opencode.ai/) engine with its own desktop UI and tool bridge. It is an independent project, unaffiliated with OpenAI or OpenCode.
 
+## NightBots and the agent toolkit
+
+NightBots are reusable, focused agents with their own instructions, provider/model, project scope, schedules, file-change triggers, memory, and conversation history. Open **NightBots** from the sidebar, start with a template, or build a bot from scratch. A bot can be opened as a normal conversation, watched while it works, paused by removing its schedule, and reviewed through its saved notes and run history.
+
+Every coding conversation and NightBot can use the same reviewable toolkit:
+
+| Area | Included capabilities |
+| --- | --- |
+| Web | Search, fetch readable pages, open sites, navigate tabs, inspect page text, interact with controls, and capture screenshots |
+| Local work | Read/search files, apply scoped edits, move files, run shell commands, execute bounded JavaScript/Python, and inspect images |
+| Documents | Read and write PDF, DOCX, and XLSX files with round-trip checks |
+| Coordination | Plans, goals, task state, persistent scoped memory, questions, subagents, command monitoring, and verification evidence |
+| Integrations | Encrypted HTTPS secrets, generic HTTP requests, Microsoft Graph email/calendar actions, SQLite queries, and app-open scheduler jobs |
+
+The built-in browser runs in an isolated conversation workspace. Web pages are treated as untrusted input, browser references expire after navigation, local/private network fetches are blocked, and passwords or file uploads stay user-driven. Mutating browser, file, command, network, email, calendar, and schedule actions pass through the same approval flow as coding changes. Scheduled jobs run while NightCode is open and pause after repeated failures instead of retrying forever.
+
+Use the **File**, **Edit**, **View**, and **Help** menus for project, browser, terminal, provider, and keyboard actions. The browser can stay visible beside the conversation so you can follow the agent’s navigation in real time.
+
 ## Measured, not promised
 
 We ran **six JavaScript repair tasks against three harnesses using the same Muse Spark 1.3 Contributor model**. Each scored attempt used independent checks and a 180-second budget.
@@ -102,7 +120,7 @@ Integration tests use isolated local model fixtures and do not spend provider cr
 
 ## Project status
 
-Version 0.2.0 targets Windows x64. macOS/Linux packages, signed distribution, provider OAuth, cloud sync, and a third-party plugin marketplace are not included. Reasoning displays only what the provider exposes; they cannot reveal private internal reasoning. Throughput estimates are labeled when authoritative usage is unavailable.
+Version 0.3.0 targets Windows x64. macOS/Linux packages, signed distribution, provider OAuth, cloud sync, and a third-party plugin marketplace are not included. Reasoning displays only what the provider exposes; they cannot reveal private internal reasoning. Throughput estimates are labeled when authoritative usage is unavailable.
 
 [Report an issue](https://github.com/NightBeamStudioDEV/NightCode/issues) with a reproducible example and redacted logs.
 

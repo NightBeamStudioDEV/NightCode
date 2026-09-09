@@ -1,6 +1,7 @@
 export type Mode =
   "Default Mode" | "Plan" | "Code" | "Debug" | "Research" | "Agent";
 export type PermissionMode = "ask" | "auto" | "full";
+export type Theme = "dark" | "light";
 export interface CustomModel {
   id: string;
   name: string;
@@ -24,6 +25,7 @@ export interface Subagent {
   progress?: string;
 }
 export interface Session {
+  botId?: string;
   permissionMode?: PermissionMode;
   reasoning?: string;
   id: string;
@@ -68,7 +70,7 @@ export interface Approval {
   agentId?: string;
   id: string;
   sessionId: string;
-  kind: "edit" | "command" | "access";
+  kind: "edit" | "command" | "access" | "action";
   path?: string;
   before?: string | null;
   after?: string | null;
@@ -126,6 +128,7 @@ export interface Snapshot {
     projectId?: string;
     permissionMode?: PermissionMode;
     reasoning?: string;
+    theme?: Theme;
   };
   activeSessionId?: string;
   projects: Project[];

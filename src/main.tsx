@@ -38,6 +38,10 @@ import {
   Pencil,
   ListPlus,
   Zap,
+  Bot,
+  Globe,
+  Moon,
+  Sun,
 } from "lucide-react";
 import type {
   Approval,
@@ -51,11 +55,15 @@ import type {
   Snapshot,
   PermissionMode,
   CustomModel,
+  Theme,
 } from "./shared";
 import "@fontsource-variable/inter";
 import { diffLines } from "diff";
 import "./style.css";
 import "./polish.css";
+import "./nightbots.css";
+import { NightBots } from "./components/NightBots";
+import { BrowserPanel } from "./components/BrowserPanel";
 import { parseSlash, slashCommands } from "./commands";
 import { SkillManager } from "./components/SkillManager";
 import { WorkPanel } from "./components/WorkPanel";
@@ -125,6 +133,12 @@ function IconButton({
   );
 }
 function App() {
+  const [browserOpen, setBrowserOpen] = useState(false),
+    [browserScope, setBrowserScope] = useState("workspace"),
+    [nativeMenu, setNativeMenu] = useState(false),
+    [botsTab, setBotsTab] = useState("bots"),
+    [newBotKey, setNewBotKey] = useState(0),
+    [theme, setTheme] = useState<Theme>("dark");
   const [snap, setSnap] = useState<Snapshot>(empty),
     [page, setPage] = useState("chat"),
     [sidebar, setSidebar] = useState(true),
@@ -187,7 +201,13 @@ function App() {
     modelButtonRef = useRef<HTMLButtonElement>(null),
     followOutput = useRef(true),
     input = useRef<HTMLTextAreaElement>(null),
-    hydrated = useRef(false);
+    hydrated = useRef(false),
+    menuActions = useRef<{
+      newChat: () => void;
+      openProject: () => void;
+      settings: () => void;
+      browseFiles: () => void;
+    } | null>(null);
   sessionRef.current = session;
   const selectedProvider =
     snap.providers.find((p) => p.id === selected) || snap.providers[0];
@@ -275,12 +295,19 @@ function App() {
         setSelectedModel(pref.modelId || "");
         setPermissionMode(pref.permissionMode || "ask");
         setReasoning(pref.reasoning || "");
+        setTheme(pref.theme || "dark");
         setProject(saved.projects.find((p) => p.id === pref.projectId) || null);
       }
       hydrated.current = true;
     });
     let timer: ReturnType<typeof setTimeout> | undefined;
     const off = api.onEvent((e) => {
+      if (e.type === "browser-open") {
+        setBrowserScope(e.data.scope);
+        setBrowserOpen(true);
+      }
+      if (e.type === "menu-closed") setNativeMenu(false);
+      if (e.type === "bot-run") void safe(refresh);
       if (e.type === "error") setError(String(e.data));
       if (e.type === "progress")
         setSnap((s) => ({
@@ -292,6 +319,30 @@ function App() {
       if (e.type === "changed") void safe(refresh);
       if (e.type === "approval") {
         void safe(refresh);
+      }
+      if (e.type === "menu") {
+        if (e.data === "new-chat") menuActions.current?.newChat();
+        else if (e.data === "new-bot") {
+          setPage("bots");
+          setBotsTab("bots");
+          setNewBotKey((n) => n + 1);
+        } else if (e.data === "bots") {
+          setPage("bots");
+          setBotsTab("bots");
+        } else if (e.data === "connections") {
+          setPage("bots");
+          setBotsTab("connections");
+        } else if (e.data === "open-project")
+          menuActions.current?.openProject();
+        else if (e.data === "settings") menuActions.current?.settings();
+        else if (e.data === "sidebar") setSidebar((s) => !s);
+        else if (e.data === "browser") {
+          setBrowserScope(sessionRef.current?.id || "workspace");
+          setBrowserOpen((b) => !b);
+        } else if (e.data === "terminal") setTerminal((t) => !t);
+        else if (e.data === "files") menuActions.current?.browseFiles();
+        else if (e.data === "theme")
+          setTheme((current) => (current === "dark" ? "light" : "dark"));
       }
       if (e.type === "command") {
         setCommandResults((list) => [
@@ -328,6 +379,7 @@ function App() {
           projectId: project?.id || "",
           permissionMode,
           reasoning: reasoningValue,
+          theme,
         })
         .catch(() => {});
   }, [
@@ -338,7 +390,11 @@ function App() {
     project?.id,
     permissionMode,
     reasoningValue,
+    theme,
   ]);
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+  }, [theme]);
   useEffect(() => {
     if (snap.engine === "Ready")
       void safe(async () => setCatalog(await api.invoke("providers.list")));
@@ -457,6 +513,12 @@ function App() {
     followOutput.current = true;
     await api.invoke("draft.save", { id: session?.id || "new", text });
     setSession(s);
+    setProject(snap.projects.find(p=>p.id===s.projectId)||null);
+    if(s.botId){
+      const data=await api.invoke<any>('bots.list');
+      const bot=data.bots.find((b:any)=>b.id===s.botId);
+      if(bot){setSelected(bot.providerId);setSelectedModel(bot.model);setReasoning('');}
+    }
     sessionRef.current = s;
     setText(snap.drafts[s.id] || "");
     setMessages([]);
@@ -673,9 +735,21 @@ function App() {
       setModal("settings");
     });
   }
+  menuActions.current = {
+    newChat,
+    openProject: () => void openProject(),
+    settings,
+    browseFiles: () => void browseFiles(),
+  };
   const pending = snap.approvals.filter((a) => a.status === "pending");
   return (
-    <div className={"app " + (!sidebar ? "sidebar-collapsed" : "")}>
+    <div
+      className={
+        "app " +
+        (!sidebar ? "sidebar-collapsed" : "") +
+        (browserOpen ? " browser-visible" : "")
+      }
+    >
       <aside className="sidebar">
         <div className="sidebar-toolbar">
           <IconButton
@@ -720,6 +794,18 @@ function App() {
             >
               <FileCode2 />
               Skills &amp; workflows
+            </button>
+            <button
+              className={
+                "nav-item nightbots-toggle " + (page === "bots" ? "active" : "")
+              }
+              aria-pressed={page === "bots"}
+              onClick={() => setPage(page === "bots" ? "chat" : "bots")}
+            >
+              <span className="nav-bot-mark" aria-hidden="true">
+                <Bot />
+              </span>
+              <span>NightBots</span> <span className="nav-pill">Bots</span>
             </button>
           </nav>
           <div className="sidebar-section">
@@ -1011,6 +1097,21 @@ function App() {
       <main className="workspace">
         <header className="workspace-toolbar">
           <div>
+            <nav className="app-menubar" aria-label="Application menu">
+              {["File", "Edit", "View", "Help"].map((name) => (
+                <button
+                  key={name}
+                  onClick={() => {
+                    setNativeMenu(true);
+                    void api
+                      .invoke("menu.open", { name })
+                      .catch(() => setNativeMenu(false));
+                  }}
+                >
+                  {name}
+                </button>
+              ))}
+            </nav>
             {!sidebar && (
               <IconButton label="Show sidebar" onClick={() => setSidebar(true)}>
                 <PanelLeft />
@@ -1031,6 +1132,23 @@ function App() {
             )}
           </div>
           <div className="window-tools">
+            <IconButton
+              label="Toggle dark mode"
+              onClick={() =>
+                setTheme((current) => (current === "dark" ? "light" : "dark"))
+              }
+            >
+              {theme === "dark" ? <Sun /> : <Moon />}
+            </IconButton>
+            <IconButton
+              label="Toggle browser"
+              onClick={() => {
+                setBrowserScope(session?.id || "workspace");
+                setBrowserOpen((b) => !b);
+              }}
+            >
+              <Globe />
+            </IconButton>
             <IconButton
               label="Code and diff viewer"
               onClick={() => void browseFiles()}
@@ -1074,7 +1192,21 @@ function App() {
         )}
         <div className="work-area">
           <section className={"main-pane " + (session ? "has-session" : "")}>
-            {page === "chat" ? (
+            {page === "bots" ? (
+              <NightBots
+                snapshot={snap}
+                initialTab={botsTab}
+                newBotKey={newBotKey}
+                onChat={(s, b) => {
+                  if (b) {
+                    setSelected(b.providerId);
+                    setSelectedModel(b.model);
+                    setReasoning("");
+                  }
+                  void openSession(s);
+                }}
+              />
+            ) : page === "chat" ? (
               <>
                 {!session ? (
                   <div className="welcome">
@@ -1265,9 +1397,11 @@ function App() {
                           <span>
                             {a.kind === "edit"
                               ? "Review file change"
-                              : a.kind === "command"
-                                ? "Review command"
-                                : "Review external access"}
+                              : a.kind === "action"
+                                ? "Review action"
+                                : a.kind === "command"
+                                  ? "Review command"
+                                  : "Review external access"}
                           </span>
                           <small>
                             {a.path?.split(/[\\/]/).pop() || a.command}
@@ -1856,6 +1990,13 @@ function App() {
               )}
             </aside>
           )}
+          {browserOpen && (
+            <BrowserPanel
+              scope={browserScope}
+              obscured={!!modal || !!approval || !!menu || nativeMenu}
+              onClose={() => setBrowserOpen(false)}
+            />
+          )}
         </div>
         {terminal && (
           <section className="terminal-panel">
@@ -1976,14 +2117,18 @@ function App() {
             <h2>
               {approval.kind === "command"
                 ? "Run this command?"
-                : "Allow external access?"}
+                : approval.kind === "action"
+                  ? "Allow this action?"
+                  : "Allow external access?"}
             </h2>
             {approval.command && <pre>{approval.command}</pre>}
             <p className="path-label">{approval.cwd || approval.path}</p>
             <p>
               {approval.kind === "command"
                 ? "This command runs on your computer and may change files."
-                : "This location is outside the selected project."}
+                : approval.kind === "action"
+                  ? "Review the target and details. Approving allows this specific action."
+                  : "This location is outside the selected project."}
             </p>
             <div className="modal-actions">
               <button

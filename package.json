@@ -1,6 +1,6 @@
 {
   "name": "nightcode-desktop",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "A desktop coding workspace with visible progress, reviewable changes, and evidence-backed tasks",
   "author": "NightBeam Studio",
@@ -13,20 +13,26 @@
     "test:e2e": "npm run build && playwright test",
     "package": "npm run build && electron-builder --win nsis portable",
     "verify:package": "node scripts/verify-package.cjs",
-    "smoke:package": "node scripts/packaged-smoke.cjs"
+    "smoke:package": "node scripts/packaged-smoke.cjs",
+    "licenses:update": "node scripts/update-notices.mjs"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.3.0",
     "@opencode-ai/plugin": "1.18.29",
     "@opencode-ai/sdk": "1.18.29",
     "diff": "^9.0.0",
+    "docx": "^9.7.1",
+    "exceljs": "^4.4.0",
     "ignore": "^7.0.0",
     "lucide-react": "^0.468.0",
+    "mammoth": "^1.12.2",
     "opencode-windows-x64": "1.18.29",
+    "pdf-lib": "^1.17.1",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-markdown": "^10.1.0",
     "sql.js": "^1.13.0",
+    "unpdf": "^1.8.1",
     "zod": "^3.24.0"
   },
   "devDependencies": {
