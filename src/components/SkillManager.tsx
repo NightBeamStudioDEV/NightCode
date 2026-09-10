@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import Markdown from "react-markdown";
+import { toolkitMentions } from "../mentions";
 type Skill = { id: string; description: string };
 const api = window.nightcode;
 export function SkillManager() {
@@ -141,13 +142,12 @@ export function SkillManager() {
       ) : (
         <>
           <p className="muted">
-            Focused guidance for every model. Mention <code>@skillname</code> in
-            a message to load it.
+            Guidance and tools in one place. Mention <code>@skillname</code> or <code>@toolkit:name</code> in a message to use them.
           </p>
           <div className="manager-toolbar">
             <input
               aria-label="Search skills"
-              placeholder="Search skills…"
+              placeholder="Search skills and toolkits…"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
@@ -194,11 +194,28 @@ export function SkillManager() {
                 </button>
               ))}
           </div>
+          <div className="toolkit-library">
+            {toolkitMentions
+              .filter((t) =>
+                (t.id + " " + t.description)
+                  .toLowerCase()
+                  .includes(query.toLowerCase()),
+              )
+              .map((t) => (
+                <article key={t.id} className="provider-card">
+                  <span>
+                    <strong>{t.id.split(":")[1]} toolkit</strong>
+                    <small>{t.description}</small>
+                    <code>@{t.id}</code>
+                  </span>
+                </article>
+              ))}
+          </div>
           {!skills.filter((s) =>
             `${s.id} ${s.description}`
               .toLowerCase()
               .includes(query.toLowerCase()),
-          ).length && <p className="muted">No matching skills.</p>}
+          ).length && !toolkitMentions.some((t) => (t.id + " " + t.description).toLowerCase().includes(query.toLowerCase())) && <p className="muted">No matching skills or toolkits.</p>}
         </>
       )}
     </div>

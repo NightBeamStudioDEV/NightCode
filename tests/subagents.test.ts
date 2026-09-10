@@ -71,17 +71,37 @@ it("uses independent tool callbacks and bounds concurrent work", async () => {
   );
   expect(await fixture.brokers[0].call("read_file", {})).toBe("one");
   expect(await fixture.brokers[1].call("read_file", {})).toBe("two");
+  await team.spawn(
+    "other-parent",
+    "Third",
+    "code",
+    "Write",
+    model,
+    async () => "three",
+  );
+  await team.spawn(
+    "parent",
+    "Fourth",
+    "explore",
+    "Inspect",
+    model,
+    async () => "four",
+  );
   await expect(
     team.spawn(
       "parent",
-      "Third",
+      "Fifth",
       "explore",
       "Inspect",
       model,
       async () => "three",
     ),
-  ).rejects.toThrow(/Two subagents/);
+  ).rejects.toThrow(/Four subagents/);
   await expect(team.wait(one.id, "another-parent")).rejects.toThrow(/Unknown/);
+  team.stopAll("parent");
+  expect(
+    team.list().find((c) => c.parentId === "other-parent")?.status,
+  ).not.toBe("stopped");
   team.stopAll();
 });
 it("cancellation revokes tools, releases waiters, and reports the stopped owner", async () => {

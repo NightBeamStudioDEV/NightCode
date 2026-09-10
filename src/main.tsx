@@ -42,6 +42,7 @@ import {
   Globe,
   Moon,
   Sun,
+  GitBranch,
 } from "lucide-react";
 import type {
   Approval,
@@ -70,14 +71,15 @@ import { WorkPanel } from "./components/WorkPanel";
 import { ProjectManager } from "./components/ProjectManager";
 import { SubagentPanel } from "./components/SubagentPanel";
 import { QuestionCard } from "./components/QuestionCard";
-import { GenerationStats } from "./components/GenerationStats";
+
+import { McpSettings } from "./components/McpSettings";
+import { toolkitMentions } from "./mentions";
 import { ModelPopover } from "./components/ModelPopover";
 import brandIcon from "../resources/icon.png";
-import {
-  ConversationFeed,
-  LiveActivity,
-  ReasoningControl,
-} from "./components/Conversation";
+import { ConversationFeed, ReasoningControl } from "./components/Conversation";
+import { unresolvedFailures } from "./activity";
+import { GitPanel } from "./components/GitPanel";
+import { BotSidebar } from "./components/BotSidebar";
 const api = window.nightcode;
 const empty: Snapshot = {
   projects: [],
@@ -133,6 +135,37 @@ function IconButton({
   );
 }
 function App() {
+  const [gitOpen, setGitOpen] = useState(false);
+  const [botView, setBotView] = useState(false);
+  const [botName, setBotName] = useState("");
+  const workspaceSession = useRef<Session | null>(null);
+  const workspaceDraft = useRef("");
+  const [modelRefreshBusy, setModelRefreshBusy] = useState(false);
+  const [quickModel, setQuickModel] = useState({ id: "", name: "" });
+  useEffect(() => {
+    const close = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setGitOpen(false);
+    };
+    window.addEventListener("keydown", close);
+    return () => window.removeEventListener("keydown", close);
+  }, []);
+  const [tasksOpen, setTasksOpen] = useState(false);
+  const [agentsOpen, setAgentsOpen] = useState(false);
+  const [mcpMentions, setMcpMentions] = useState<
+    { id: string; description: string }[]
+  >([]);
+  const [modelEfforts, setModelEfforts] = useState("low, medium, high");
+  useEffect(() => {
+    if (!tasksOpen && !agentsOpen) return;
+    const close = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setTasksOpen(false);
+        setAgentsOpen(false);
+      }
+    };
+    window.addEventListener("keydown", close);
+    return () => window.removeEventListener("keydown", close);
+  }, [tasksOpen, agentsOpen]);
   const [browserOpen, setBrowserOpen] = useState(false),
     [browserScope, setBrowserScope] = useState("workspace"),
     [nativeMenu, setNativeMenu] = useState(false),
@@ -175,8 +208,7 @@ function App() {
     [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
     [busy, setBusy] = useState(false),
-    [running, setRunning] = useState(false),
-    [taskSessionId, setTaskSessionId] = useState<string | undefined>(),
+    [activeSessionIds, setActiveSessionIds] = useState<string[]>([]),
     [attachments, setAttachments] = useState<Attachment[]>([]),
     [terminal, setTerminal] = useState(false),
     [viewer, setViewer] = useState(false),
@@ -219,6 +251,9 @@ function App() {
     () => catalog.find((p) => p.id === selectedProvider?.id)?.models || [],
     [catalog, selectedProvider?.id],
   );
+  const running = !!session && activeSessionIds.includes(session.id);
+  const unresolvedActionCount = unresolvedFailures(messages).length;
+  const taskSessionId = running ? session?.id : undefined;
   const variants: string[] = ["", ...(modelInfo?.variants || [])];
   const reasoningValue = variants.includes(reasoning) ? reasoning : "";
   const modelDisplayName = modelInfo?.name || modelId || "Select model";
@@ -230,7 +265,7 @@ function App() {
     full: "Full access",
   };
   const [editingProject, setEditingProject] = useState<Project | null>(null);
-  const mentionQuery = text.match(/(?:^|\s)@([a-z0-9-]*)$/)?.[1];
+  const mentionQuery = text.match(/(?:^|\s)@([a-z0-9:-]*)$/)?.[1];
   useEffect(() => {
     if (mentionQuery !== undefined)
       void api
@@ -239,10 +274,11 @@ function App() {
         .catch(() => {});
   }, [mentionQuery !== undefined, modal]);
   const [mentionIndex, setMentionIndex] = useState(0);
+  const mentionOptions = [...skillList, ...toolkitMentions, ...mcpMentions];
   const mentionMatches =
     mentionQuery === undefined
       ? []
-      : skillList.filter((s) => s.id.includes(mentionQuery));
+      : mentionOptions.filter((s) => s.id.includes(mentionQuery));
   useEffect(() => setMentionIndex(0), [mentionQuery]);
   const refresh = async () => {
     const s = await api.invoke<Snapshot>("snapshot");
@@ -256,8 +292,9 @@ function App() {
         : null,
     );
     setCommandResults(s.commands);
-    setTaskSessionId(s.activeSessionId);
-    setRunning(!!s.activeSessionId);
+    setActiveSessionIds(
+      s.activeSessionIds || (s.activeSessionId ? [s.activeSessionId] : []),
+    );
     return s;
   };
   const safe = async <T,>(fn: () => Promise<T>): Promise<T | undefined> => {
@@ -286,6 +323,13 @@ function App() {
   useEffect(() => {
     void safe(async () => {
       const saved = await refresh();
+      const mcps =
+        await api.invoke<{ name: string; location: string }[]>("mcp.list");
+      setMcpMentions(
+        Array.isArray(mcps)
+          ? mcps.map((m) => ({ id: `mcp:${m.name}`, description: m.location }))
+          : [],
+      );
       setText(saved.drafts.new || "");
       if (saved.preferences) {
         const pref = saved.preferences;
@@ -323,13 +367,16 @@ function App() {
       if (e.type === "menu") {
         if (e.data === "new-chat") menuActions.current?.newChat();
         else if (e.data === "new-bot") {
+          setBotView(true);
           setPage("bots");
           setBotsTab("bots");
           setNewBotKey((n) => n + 1);
         } else if (e.data === "bots") {
+          setBotView(true);
           setPage("bots");
           setBotsTab("bots");
         } else if (e.data === "connections") {
+          setBotView(true);
           setPage("bots");
           setBotsTab("connections");
         } else if (e.data === "open-project")
@@ -351,8 +398,13 @@ function App() {
         ]);
       }
       if (e.type === "task") {
-        setRunning(e.data.status === "running");
-        setTaskSessionId(e.data.status === "running" ? e.data.id : undefined);
+        setActiveSessionIds((ids) =>
+          e.data.status === "running"
+            ? [...new Set([...ids, e.data.id])]
+            : e.data.id
+              ? ids.filter((id) => id !== e.data.id)
+              : [],
+        );
       }
       if (e.type === "messages" || e.type === "reconnect") {
         if (!timer)
@@ -505,25 +557,61 @@ function App() {
     setMessages([]);
     setText("");
     setAttachments([]);
-    setPage("chat");
+    setPage(botView ? "bots" : "chat");
     setMenu("");
     input.current?.focus();
   }
   async function openSession(s: Session) {
+    setBotView(!!s.botId);
     followOutput.current = true;
     await api.invoke("draft.save", { id: session?.id || "new", text });
     setSession(s);
-    setProject(snap.projects.find(p=>p.id===s.projectId)||null);
-    if(s.botId){
-      const data=await api.invoke<any>('bots.list');
-      const bot=data.bots.find((b:any)=>b.id===s.botId);
-      if(bot){setSelected(bot.providerId);setSelectedModel(bot.model);setReasoning('');}
+    setProject(snap.projects.find((p) => p.id === s.projectId) || null);
+    if (s.botId) {
+      const data = await api.invoke<any>("bots.list");
+      const bot = data.bots.find((b: any) => b.id === s.botId);
+      if (bot) {
+        setBotName(bot.name);
+        setMode("Default Mode");
+        setSelected(bot.providerId);
+        setSelectedModel(bot.model);
+        setReasoning("");
+      }
     }
     sessionRef.current = s;
     setText(snap.drafts[s.id] || "");
     setMessages([]);
     setPage("chat");
     await safe(() => loadMessages(s.id));
+  }
+  function toggleBotView() {
+    if (botView) {
+      setBotView(false);
+      if (workspaceSession.current) void openSession(workspaceSession.current).then(() => setText(workspaceDraft.current));
+      else {
+        setSession(null);
+        setMessages([]);
+        setText(workspaceDraft.current);
+        setPage("chat");
+      }
+    } else {
+      workspaceSession.current = session;
+      workspaceDraft.current = text;
+      setBotView(true);
+      const latest = sortSessions(
+        snap.sessions.filter((s) => s.botId && !s.archived),
+      )[0];
+      if (latest) void openSession(latest);
+      else {
+        setSession(null);
+        setMessages([]);
+        setText("");
+        setPage("bots");
+      }
+    }
+    setTasksOpen(false);
+    setAgentsOpen(false);
+    setGitOpen(false);
   }
   async function togglePin(s: Session) {
     await safe(() =>
@@ -721,11 +809,13 @@ function App() {
         name: modelForm.name.trim() || modelForm.id.trim(),
         ...(modelForm.reasoning
           ? {
-              variants: {
-                low: { reasoningEffort: "low" },
-                medium: { reasoningEffort: "medium" },
-                high: { reasoningEffort: "high" },
-              },
+              variants: Object.fromEntries(
+                modelEfforts
+                  .split(",")
+                  .map((s) => s.trim())
+                  .filter(Boolean)
+                  .map((effort) => [effort, { reasoningEffort: effort }]),
+              ),
             }
           : {}),
       };
@@ -746,6 +836,7 @@ function App() {
     <div
       className={
         "app " +
+        (botView ? "bot-view " : "") +
         (!sidebar ? "sidebar-collapsed" : "") +
         (browserOpen ? " browser-visible" : "")
       }
@@ -777,6 +868,17 @@ function App() {
             <Bell />
             {pending.length > 0 && <i className="notification-dot" />}
           </IconButton>
+          <button
+            className="bots-view-toggle"
+            role="switch"
+            aria-label="Bots view"
+            aria-checked={botView}
+            title="Toggle Bots view"
+            onClick={toggleBotView}
+          >
+            <Bot />
+            <span />
+          </button>
         </div>
         <div className="sidebar-content">
           <nav>
@@ -793,172 +895,121 @@ function App() {
               onClick={() => void openSkills()}
             >
               <FileCode2 />
-              Skills &amp; workflows
-            </button>
-            <button
-              className={
-                "nav-item nightbots-toggle " + (page === "bots" ? "active" : "")
-              }
-              aria-pressed={page === "bots"}
-              onClick={() => setPage(page === "bots" ? "chat" : "bots")}
-            >
-              <span className="nav-bot-mark" aria-hidden="true">
-                <Bot />
-              </span>
-              <span>NightBots</span> <span className="nav-pill">Bots</span>
+              Skills &amp; toolkits
             </button>
           </nav>
-          <div className="sidebar-section">
-            <div className="section-label section-heading">
-              Projects
-              <IconButton
-                label="Open project"
-                onClick={() => void openProject()}
-              >
-                <Plus />
-              </IconButton>
-            </div>
-            {snap.projects.map((p) => (
-              <div className="project-group" key={p.id}>
-                <div className="project-group-heading">
+          {botView ? (
+            <BotSidebar
+              snapshot={snap}
+              selected={session?.id}
+              onOpen={(s) => void openSession(s)}
+              onManage={() => setPage("bots")}
+            />
+          ) : (
+            <>
+              <div className="sidebar-section">
+                <div className="section-label section-heading">
+                  Projects
                   <IconButton
-                    label={
-                      (collapsedProjects.includes(p.id)
-                        ? "Expand "
-                        : "Collapse ") + p.name
-                    }
-                    onClick={() =>
-                      setCollapsedProjects((ids) =>
-                        ids.includes(p.id)
-                          ? ids.filter((id) => id !== p.id)
-                          : [...ids, p.id],
-                      )
-                    }
-                  >
-                    <ChevronRight
-                      className={
-                        !collapsedProjects.includes(p.id) ? "expanded" : ""
-                      }
-                    />
-                  </IconButton>
-                  <button
-                    className={project?.id === p.id ? "current-project" : ""}
-                    onClick={() => chooseProject(p)}
-                  >
-                    <FolderOpen />
-                    {p.name}
-                  </button>
-                  <IconButton
-                    label={"Edit project " + p.name}
-                    onClick={() => {
-                      setEditingProject(p);
-                      setPage("projects");
-                    }}
-                  >
-                    <Pencil />
-                  </IconButton>
-                  <IconButton
-                    label={"New conversation in " + p.name}
-                    onClick={() => {
-                      newChat();
-                      setProject(p);
-                      setCollapsedProjects((ids) =>
-                        ids.filter((id) => id !== p.id),
-                      );
-                    }}
+                    label="Open project"
+                    onClick={() => void openProject()}
                   >
                     <Plus />
                   </IconButton>
                 </div>
-                {!collapsedProjects.includes(p.id) && (
-                  <div className="project-conversations">
-                    {sortSessions(
-                      snap.sessions.filter(
-                        (s) => s.projectId === p.id && !s.archived,
-                      ),
-                    ).map((s) => (
-                      <div
-                        key={s.id}
-                        title={s.title}
-                        className={
-                          "convo-row " +
-                          (session?.id === s.id ? "selected" : "")
+                {snap.projects.map((p) => (
+                  <div className="project-group" key={p.id}>
+                    <div className="project-group-heading">
+                      <IconButton
+                        label={
+                          (collapsedProjects.includes(p.id)
+                            ? "Expand "
+                            : "Collapse ") + p.name
+                        }
+                        onClick={() =>
+                          setCollapsedProjects((ids) =>
+                            ids.includes(p.id)
+                              ? ids.filter((id) => id !== p.id)
+                              : [...ids, p.id],
+                          )
                         }
                       >
-                        <button
-                          aria-label={s.title}
-                          className="convo-title"
-                          onClick={() => void openSession(s)}
-                        >
-                          {s.pinned && <Pin className="convo-pin" />}
-                          <span>{s.title}</span>
-                        </button>
-                        <span className="convo-actions">
-                          <IconButton
-                            label={s.pinned ? "Unpin" : "Pin " + s.title}
-                            onClick={() => void togglePin(s)}
-                          >
-                            {s.pinned ? <PinOff /> : <Pin />}
-                          </IconButton>
-                          <IconButton
-                            label={"Archive " + s.title}
-                            onClick={() => void toggleArchive(s)}
-                          >
-                            <Archive />
-                          </IconButton>
-                          <IconButton
-                            label={"Delete " + s.title}
-                            onClick={() => requestDelete(s)}
-                          >
-                            <Trash2 />
-                          </IconButton>
-                        </span>
-                      </div>
-                    ))}
-                    {!snap.sessions.some(
-                      (s) => s.projectId === p.id && !s.archived,
-                    ) && (
+                        <ChevronRight
+                          className={
+                            !collapsedProjects.includes(p.id) ? "expanded" : ""
+                          }
+                        />
+                      </IconButton>
                       <button
-                        className="muted"
+                        className={
+                          project?.id === p.id ? "current-project" : ""
+                        }
+                        onClick={() => chooseProject(p)}
+                      >
+                        <FolderOpen />
+                        {p.name}
+                      </button>
+                      <IconButton
+                        label={"Edit project " + p.name}
+                        onClick={() => {
+                          setEditingProject(p);
+                          setPage("projects");
+                        }}
+                      >
+                        <Pencil />
+                      </IconButton>
+                      <IconButton
+                        label={"New conversation in " + p.name}
                         onClick={() => {
                           newChat();
                           setProject(p);
+                          setCollapsedProjects((ids) =>
+                            ids.filter((id) => id !== p.id),
+                          );
                         }}
                       >
-                        Start a conversation
-                      </button>
-                    )}
-                    {snap.sessions.some(
-                      (s) => s.projectId === p.id && s.archived,
-                    ) && (
-                      <details className="archived-group">
-                        <summary>
-                          Archived ·{" "}
-                          {
-                            snap.sessions.filter(
-                              (s) => s.projectId === p.id && s.archived,
-                            ).length
-                          }
-                        </summary>
+                        <Plus />
+                      </IconButton>
+                    </div>
+                    {!collapsedProjects.includes(p.id) && (
+                      <div className="project-conversations">
                         {sortSessions(
                           snap.sessions.filter(
-                            (s) => s.projectId === p.id && s.archived,
+                            (s) => s.projectId === p.id && !s.archived,
                           ),
                         ).map((s) => (
-                          <div key={s.id} title={s.title} className="convo-row">
+                          <div
+                            key={s.id}
+                            title={s.title}
+                            className={
+                              "convo-row " +
+                              (session?.id === s.id ? "selected" : "")
+                            }
+                          >
                             <button
                               aria-label={s.title}
                               className="convo-title"
                               onClick={() => void openSession(s)}
                             >
+                              {activeSessionIds.includes(s.id) ? (
+                                <Loader2 className="spin convo-pin" />
+                              ) : (
+                                s.pinned && <Pin className="convo-pin" />
+                              )}
                               <span>{s.title}</span>
                             </button>
                             <span className="convo-actions">
                               <IconButton
-                                label={"Unarchive " + s.title}
+                                label={s.pinned ? "Unpin" : "Pin " + s.title}
+                                onClick={() => void togglePin(s)}
+                              >
+                                {s.pinned ? <PinOff /> : <Pin />}
+                              </IconButton>
+                              <IconButton
+                                label={"Archive " + s.title}
                                 onClick={() => void toggleArchive(s)}
                               >
-                                <ArchiveRestore />
+                                <Archive />
                               </IconButton>
                               <IconButton
                                 label={"Delete " + s.title}
@@ -969,116 +1020,180 @@ function App() {
                             </span>
                           </div>
                         ))}
-                      </details>
+                        {!snap.sessions.some(
+                          (s) => s.projectId === p.id && !s.archived,
+                        ) && (
+                          <button
+                            className="muted"
+                            onClick={() => {
+                              newChat();
+                              setProject(p);
+                            }}
+                          >
+                            Start a conversation
+                          </button>
+                        )}
+                        {snap.sessions.some(
+                          (s) => s.projectId === p.id && s.archived,
+                        ) && (
+                          <details className="archived-group">
+                            <summary>
+                              Archived ·{" "}
+                              {
+                                snap.sessions.filter(
+                                  (s) => s.projectId === p.id && s.archived,
+                                ).length
+                              }
+                            </summary>
+                            {sortSessions(
+                              snap.sessions.filter(
+                                (s) => s.projectId === p.id && s.archived,
+                              ),
+                            ).map((s) => (
+                              <div
+                                key={s.id}
+                                title={s.title}
+                                className="convo-row"
+                              >
+                                <button
+                                  aria-label={s.title}
+                                  className="convo-title"
+                                  onClick={() => void openSession(s)}
+                                >
+                                  <span>{s.title}</span>
+                                </button>
+                                <span className="convo-actions">
+                                  <IconButton
+                                    label={"Unarchive " + s.title}
+                                    onClick={() => void toggleArchive(s)}
+                                  >
+                                    <ArchiveRestore />
+                                  </IconButton>
+                                  <IconButton
+                                    label={"Delete " + s.title}
+                                    onClick={() => requestDelete(s)}
+                                  >
+                                    <Trash2 />
+                                  </IconButton>
+                                </span>
+                              </div>
+                            ))}
+                          </details>
+                        )}
+                      </div>
                     )}
-                  </div>
-                )}
-              </div>
-            ))}
-            <button
-              className={
-                "nav-item project-nav " +
-                (page === "projects" ? "selected" : "")
-              }
-              onClick={() => setPage("projects")}
-            >
-              <Folder />
-              My Projects
-            </button>
-          </div>
-          <div className="sidebar-section recent">
-            <div className="section-label">Recent</div>
-            {snap.sessions.filter((s) => !s.projectId && !s.archived).length ===
-            0 ? (
-              <p className="empty-recent">
-                Your conversations will appear here.
-              </p>
-            ) : (
-              sortSessions(
-                snap.sessions.filter((s) => !s.projectId && !s.archived),
-              ).map((s) => (
-                <div
-                  key={s.id}
-                  title={s.title}
-                  className={
-                    "convo-row recent-item " +
-                    (session?.id === s.id && page === "chat" ? "selected" : "")
-                  }
-                >
-                  <button
-                    className="convo-title"
-                    onClick={() => void openSession(s)}
-                    aria-label={s.title}
-                  >
-                    {s.pinned ? (
-                      <Pin className="convo-pin" />
-                    ) : (
-                      <span className="bullet">•</span>
-                    )}
-                    <span>{s.title}</span>
-                  </button>
-                  <span className="convo-actions">
-                    <IconButton
-                      label={s.pinned ? "Unpin" : "Pin " + s.title}
-                      onClick={() => void togglePin(s)}
-                    >
-                      {s.pinned ? <PinOff /> : <Pin />}
-                    </IconButton>
-                    <IconButton
-                      label={"Archive " + s.title}
-                      onClick={() => void toggleArchive(s)}
-                    >
-                      <Archive />
-                    </IconButton>
-                    <IconButton
-                      label={"Delete " + s.title}
-                      onClick={() => requestDelete(s)}
-                    >
-                      <Trash2 />
-                    </IconButton>
-                  </span>
-                </div>
-              ))
-            )}
-            {snap.sessions.some((s) => !s.projectId && s.archived) && (
-              <details className="archived-group">
-                <summary>
-                  Archived ·{" "}
-                  {
-                    snap.sessions.filter((s) => !s.projectId && s.archived)
-                      .length
-                  }
-                </summary>
-                {sortSessions(
-                  snap.sessions.filter((s) => !s.projectId && s.archived),
-                ).map((s) => (
-                  <div key={s.id} title={s.title} className="convo-row">
-                    <button
-                      className="convo-title"
-                      onClick={() => void openSession(s)}
-                      aria-label={s.title}
-                    >
-                      <span>{s.title}</span>
-                    </button>
-                    <span className="convo-actions">
-                      <IconButton
-                        label={"Unarchive " + s.title}
-                        onClick={() => void toggleArchive(s)}
-                      >
-                        <ArchiveRestore />
-                      </IconButton>
-                      <IconButton
-                        label={"Delete " + s.title}
-                        onClick={() => requestDelete(s)}
-                      >
-                        <Trash2 />
-                      </IconButton>
-                    </span>
                   </div>
                 ))}
-              </details>
-            )}
-          </div>
+                <button
+                  className={
+                    "nav-item project-nav " +
+                    (page === "projects" ? "selected" : "")
+                  }
+                  onClick={() => setPage("projects")}
+                >
+                  <Folder />
+                  My Projects
+                </button>
+              </div>
+              <div className="sidebar-section recent">
+                <div className="section-label">Recent</div>
+                {snap.sessions.filter((s) => !s.projectId && !s.archived)
+                  .length === 0 ? (
+                  <p className="empty-recent">
+                    Your conversations will appear here.
+                  </p>
+                ) : (
+                  sortSessions(
+                    snap.sessions.filter((s) => !s.projectId && !s.archived),
+                  ).map((s) => (
+                    <div
+                      key={s.id}
+                      title={s.title}
+                      className={
+                        "convo-row recent-item " +
+                        (session?.id === s.id && page === "chat"
+                          ? "selected"
+                          : "")
+                      }
+                    >
+                      <button
+                        className="convo-title"
+                        onClick={() => void openSession(s)}
+                        aria-label={s.title}
+                      >
+                        {activeSessionIds.includes(s.id) ? (
+                          <Loader2 className="spin convo-pin" />
+                        ) : s.pinned ? (
+                          <Pin className="convo-pin" />
+                        ) : (
+                          <span className="bullet">•</span>
+                        )}
+                        <span>{s.title}</span>
+                      </button>
+                      <span className="convo-actions">
+                        <IconButton
+                          label={s.pinned ? "Unpin" : "Pin " + s.title}
+                          onClick={() => void togglePin(s)}
+                        >
+                          {s.pinned ? <PinOff /> : <Pin />}
+                        </IconButton>
+                        <IconButton
+                          label={"Archive " + s.title}
+                          onClick={() => void toggleArchive(s)}
+                        >
+                          <Archive />
+                        </IconButton>
+                        <IconButton
+                          label={"Delete " + s.title}
+                          onClick={() => requestDelete(s)}
+                        >
+                          <Trash2 />
+                        </IconButton>
+                      </span>
+                    </div>
+                  ))
+                )}
+                {snap.sessions.some((s) => !s.projectId && s.archived) && (
+                  <details className="archived-group">
+                    <summary>
+                      Archived ·{" "}
+                      {
+                        snap.sessions.filter((s) => !s.projectId && s.archived)
+                          .length
+                      }
+                    </summary>
+                    {sortSessions(
+                      snap.sessions.filter((s) => !s.projectId && s.archived),
+                    ).map((s) => (
+                      <div key={s.id} title={s.title} className="convo-row">
+                        <button
+                          className="convo-title"
+                          onClick={() => void openSession(s)}
+                          aria-label={s.title}
+                        >
+                          <span>{s.title}</span>
+                        </button>
+                        <span className="convo-actions">
+                          <IconButton
+                            label={"Unarchive " + s.title}
+                            onClick={() => void toggleArchive(s)}
+                          >
+                            <ArchiveRestore />
+                          </IconButton>
+                          <IconButton
+                            label={"Delete " + s.title}
+                            onClick={() => requestDelete(s)}
+                          >
+                            <Trash2 />
+                          </IconButton>
+                        </span>
+                      </div>
+                    ))}
+                  </details>
+                )}
+              </div>
+            </>
+          )}
         </div>
         <button
           className="identity"
@@ -1089,7 +1204,10 @@ function App() {
           <BrandMark small />
           <span>
             <strong>NightCode</strong>
-            <small>Developer Workspace</small>
+            <small>
+              {botView ? "Personal conversations" : "Developer Workspace"} ·
+              0.4.0
+            </small>
           </span>
           <Settings className="identity-settings" />
         </button>
@@ -1126,12 +1244,91 @@ function App() {
                   setModal("conversation");
                 }}
               >
-                {session.title}
+                {botView ? botName || "Conversation" : session.title}
                 <ChevronDown />
               </button>
             )}
           </div>
           <div className="window-tools">
+            {project && page === "chat" && !botView && (
+              <button
+                className="tasks-toggle"
+                aria-label="Repository"
+                aria-expanded={gitOpen}
+                onClick={() => {
+                  setGitOpen(!gitOpen);
+                  setTasksOpen(false);
+                  setAgentsOpen(false);
+                }}
+              >
+                <GitBranch />
+                <span>Repository</span>
+              </button>
+            )}
+            {session &&
+              page === "chat" &&
+              (!botView ||
+                (snap.tasks || []).some((t) => t.sessionId === session.id)) && (
+                <button
+                  className="tasks-toggle"
+                  aria-expanded={tasksOpen}
+                  aria-controls="tasks-panel"
+                  onClick={() => {
+                    setGitOpen(false);
+                    setTasksOpen(!tasksOpen);
+                  }}
+                >
+                  <ListPlus />
+                  <span>Tasks &amp; checks</span>
+                  <small>
+                    {
+                      (snap.tasks || []).filter(
+                        (t) =>
+                          t.sessionId === session.id && t.status === "complete",
+                      ).length
+                    }
+                    /
+                    {
+                      (snap.tasks || []).filter(
+                        (t) => t.sessionId === session.id,
+                      ).length
+                    }
+                  </small>
+                </button>
+              )}
+            {session &&
+              page === "chat" &&
+              (snap.subagents || []).some((a) => a.parentId === session.id) && (
+                <button
+                  className="tasks-toggle"
+                  aria-label="Subagents"
+                  aria-expanded={agentsOpen}
+                  aria-controls="subagents-panel"
+                  onClick={() => setAgentsOpen(!agentsOpen)}
+                >
+                  <span
+                    className={
+                      (snap.subagents || []).some(
+                        (a) =>
+                          a.parentId === session.id &&
+                          ["running", "starting"].includes(a.status),
+                      )
+                        ? "working-orbit"
+                        : ""
+                    }
+                  >
+                    <Bot />
+                  </span>
+                  <span>Subagents</span>
+                  <small>
+                    {
+                      (snap.subagents || []).filter(
+                        (a) => a.parentId === session.id,
+                      ).length
+                    }
+                  </small>
+                </button>
+              )}
             <IconButton
               label="Toggle dark mode"
               onClick={() =>
@@ -1182,6 +1379,90 @@ function App() {
             </IconButton>
           </div>
         </header>
+        {gitOpen && project && (
+          <GitPanel
+            key={project.id}
+            projectId={project.id}
+            onClose={() => setGitOpen(false)}
+          />
+        )}
+
+        {tasksOpen && session && page === "chat" && (
+          <>
+            <button
+              className="tasks-backdrop"
+              aria-label="Close tasks and checks"
+              onClick={() => setTasksOpen(false)}
+            />
+            <aside
+              id="tasks-panel"
+              className="tasks-popover"
+              aria-label="Tasks and checks"
+            >
+              <div className="tasks-panel-heading">
+                <span>Conversation progress</span>
+                <IconButton
+                  label="Close tasks panel"
+                  onClick={() => setTasksOpen(false)}
+                >
+                  <X />
+                </IconButton>
+              </div>
+              <WorkPanel
+                key={session.id}
+                tasks={(snap.tasks || []).filter(
+                  (t) => t.sessionId === session.id,
+                )}
+                sessionId={session.id}
+              />
+              {!(snap.tasks || []).some((t) => t.sessionId === session.id) && (
+                <p className="muted">No tasks recorded yet.</p>
+              )}
+              {snap.progress?.[session.id]?.length ? (
+                <div className="step-list">
+                  {snap.progress[session.id].map((step, i) => (
+                    <div key={i}>
+                      {step.status === "complete" ? (
+                        <Check />
+                      ) : step.status === "running" ? (
+                        <span className="pulse-dot" />
+                      ) : (
+                        <span className="step-pending" />
+                      )}
+                      {step.label}
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </aside>
+          </>
+        )}
+        {agentsOpen && session && page === "chat" && (
+          <aside
+            id="subagents-panel"
+            className={
+              "tasks-popover agents-popover " +
+              (tasksOpen ? "beside-tasks" : "")
+            }
+            aria-label="Agent tree"
+          >
+            <div className="tasks-panel-heading">
+              <span>{project?.name || "Conversation"} · Local</span>
+              <IconButton
+                label="Close subagents panel"
+                onClick={() => setAgentsOpen(false)}
+              >
+                <X />
+              </IconButton>
+            </div>
+            <SubagentPanel
+              key={session.id}
+              agents={(snap.subagents || []).filter(
+                (a) => a.parentId === session.id,
+              )}
+            />
+          </aside>
+        )}
         {error && (
           <div role="alert" className="banner error">
             <span>{error}</span>
@@ -1251,19 +1532,28 @@ function App() {
                         {snap.goals[session.id].evidence && (
                           <small>{snap.goals[session.id].evidence}</small>
                         )}
+                        {snap.goals[session.id].status === "complete" && (
+                          <div className="goal-achieved" role="status">
+                            <span className="outcome-check">✓</span>
+                            <span>
+                              Goal achieved.
+                              {unresolvedActionCount > 0 && (
+                                <small>
+                                  {unresolvedActionCount} earlier{" "}
+                                  {unresolvedActionCount === 1
+                                    ? "action remains"
+                                    : "actions remain"}{" "}
+                                  in the audit trail.
+                                </small>
+                              )}
+                            </span>
+                          </div>
+                        )}
                       </details>
                     )}
-                    <ConversationFeed messages={messages} />
-                    <WorkPanel
-                      tasks={(snap.tasks || []).filter(
-                        (t) => t.sessionId === session.id,
-                      )}
-                      sessionId={session.id}
-                    />
-                    <SubagentPanel
-                      agents={(snap.subagents || []).filter(
-                        (a) => a.parentId === session?.id,
-                      )}
+                    <ConversationFeed
+                      messages={messages}
+                      goalStatus={snap.goals?.[session.id]?.status}
                     />
                     {(snap.questions || [])
                       .filter((question) => question.sessionId === session.id)
@@ -1280,38 +1570,6 @@ function App() {
                           }}
                         />
                       ))}
-                    {snap.progress?.[session.id]?.length ? (
-                      <div className="step-list">
-                        {snap.progress[session.id].map((step, i) => (
-                          <div key={i}>
-                            {step.status === "complete" ? (
-                              <Check />
-                            ) : step.status === "running" ? (
-                              <span className="pulse-dot" />
-                            ) : (
-                              <span className="step-pending" />
-                            )}
-                            {step.label}
-                          </div>
-                        ))}
-                      </div>
-                    ) : null}
-                    {running && taskSessionId === session.id && (
-                      <LiveActivity
-                        question={(snap.questions || []).some(
-                          (question) => question.sessionId === session.id,
-                        )}
-                        messages={messages}
-                        waiting={pending.some(
-                          (a) => a.sessionId === session.id,
-                        )}
-                        step={
-                          snap.progress?.[session.id]?.find(
-                            (step) => step.status === "running",
-                          )?.label
-                        }
-                      />
-                    )}
                     <div ref={end} />
                   </div>
                 )}
@@ -1411,12 +1669,6 @@ function App() {
                       ))}
                     </div>
                   )}
-                  {session && (
-                    <GenerationStats
-                      messages={messages}
-                      running={running && taskSessionId === session.id}
-                    />
-                  )}
                   <div
                     className="composer-shell"
                     onDragOver={(e) => {
@@ -1468,33 +1720,31 @@ function App() {
                         </div>
                       )}
                       {mentionQuery !== undefined &&
-                        skillList.some((s) => s.id.includes(mentionQuery)) && (
+                        mentionMatches.length > 0 && (
                           <div
                             className="slash-suggestions skill-suggestions"
-                            aria-label="Skill mentions"
+                            aria-label="Skill and tool mentions"
                           >
-                            {skillList
-                              .filter((s) => s.id.includes(mentionQuery))
-                              .map((skill, index) => (
-                                <button
-                                  className={
-                                    index === mentionIndex ? "selected" : ""
-                                  }
-                                  key={skill.id}
-                                  onClick={() => {
-                                    setText(
-                                      text.replace(
-                                        /@[a-z0-9-]*$/,
-                                        `@${skill.id} `,
-                                      ),
-                                    );
-                                    input.current?.focus();
-                                  }}
-                                >
-                                  <strong>@{skill.id}</strong>
-                                  <span>{skill.description}</span>
-                                </button>
-                              ))}
+                            {mentionMatches.map((skill, index) => (
+                              <button
+                                className={
+                                  index === mentionIndex ? "selected" : ""
+                                }
+                                key={skill.id}
+                                onClick={() => {
+                                  setText(
+                                    text.replace(
+                                      /@[a-z0-9:-]*$/,
+                                      `@${skill.id} `,
+                                    ),
+                                  );
+                                  input.current?.focus();
+                                }}
+                              >
+                                <strong>@{skill.id}</strong>
+                                <span>{skill.description}</span>
+                              </button>
+                            ))}
                           </div>
                         )}
                       {mode !== "Default Mode" && (
@@ -1516,7 +1766,11 @@ function App() {
                       <textarea
                         ref={input}
                         aria-label="Message NightCode"
-                        placeholder="Ask NightCode to build, fix, or explore…"
+                        placeholder={
+                          botView
+                            ? "Message your bot…"
+                            : "Ask NightCode to build, fix, or explore…"
+                        }
                         value={text}
                         onChange={(e) => setText(e.target.value)}
                         onKeyDown={(e) => {
@@ -1540,7 +1794,7 @@ function App() {
                             else
                               setText(
                                 text.replace(
-                                  /@[a-z0-9-]*$/,
+                                  /@[a-z0-9:-]*$/,
                                   `@${mentionMatches[mentionIndex % mentionMatches.length].id} `,
                                 ),
                               );
@@ -1704,38 +1958,75 @@ function App() {
                                 <div className="model-section-label">
                                   Provider
                                 </div>
-                                <div className="provider-switcher">
+                                <select
+                                  className="provider-switcher"
+                                  aria-label="Choose provider"
+                                  value={selectedProvider?.id || ""}
+                                  onChange={(e) => {
+                                    setSelected(e.target.value);
+                                    setSelectedModel("");
+                                    setReasoning("");
+                                    setModelSearch("");
+                                  }}
+                                >
                                   {snap.providers.map((p) => (
+                                    <option key={p.id} value={p.id}>
+                                      {p.name}
+                                    </option>
+                                  ))}
+                                </select>
+                                <div className="model-section-label">
+                                  <span>
+                                    Model · {selectedProvider?.name || "None"}
+                                  </span>
+                                  <span className="model-actions">
                                     <button
-                                      key={p.id}
+                                      aria-label="Refresh models"
+                                      title="Refresh models"
+                                      disabled={
+                                        modelRefreshBusy || !selectedProvider
+                                      }
+                                      onClick={() =>
+                                        void safe(async () => {
+                                          setModelRefreshBusy(true);
+                                          try {
+                                            setCatalog(
+                                              await api.invoke(
+                                                "models.refresh",
+                                                {
+                                                  providerId:
+                                                    selectedProvider?.id,
+                                                },
+                                              ),
+                                            );
+                                          } finally {
+                                            setModelRefreshBusy(false);
+                                          }
+                                        })
+                                      }
+                                    >
+                                      <RotateCw
+                                        className={
+                                          modelRefreshBusy ? "spin" : ""
+                                        }
+                                      />
+                                    </button>
+                                    <button
+                                      aria-label="Add or rename model"
+                                      title="Add or rename model"
+                                      disabled={!selectedProvider}
                                       onClick={() => {
-                                        setSelected(p.id);
-                                        setSelectedModel("");
-                                        setReasoning("");
-                                        setModelSearch("");
+                                        setQuickModel({
+                                          id: modelId,
+                                          name: modelDisplayName,
+                                        });
+                                        setMenu("");
+                                        setModal("quick-model");
                                       }}
                                     >
-                                      <span>
-                                        {p.name}
-                                        <small>
-                                          {
-                                            (
-                                              catalog.find(
-                                                (entry) => entry.id === p.id,
-                                              )?.models || []
-                                            ).length
-                                          }{" "}
-                                          models
-                                        </small>
-                                      </span>
-                                      {p.id === selectedProvider?.id && (
-                                        <Check />
-                                      )}
+                                      <Plus />
                                     </button>
-                                  ))}
-                                </div>
-                                <div className="model-section-label">
-                                  Model · {selectedProvider?.name || "None"}
+                                  </span>
                                 </div>
                                 <div className="model-list">
                                   {catalogModels.filter((m) =>
@@ -2170,24 +2461,26 @@ function App() {
             <div className="modal-heading">
               <h2>
                 {modal === "skills"
-                  ? "Skills & workflows"
+                  ? "Skills & toolkits"
                   : modal === "help"
                     ? "Commands"
                     : modal === "settings"
                       ? "Settings"
                       : modal === "conversation"
                         ? "Conversation options"
-                        : modal === "add-model"
-                          ? "Add custom model"
-                          : modal === "queue-edit"
-                            ? "Edit queued prompt"
-                            : modal === "search"
-                              ? "Find your next step"
-                              : modal === "notifications"
-                                ? "Activity"
-                                : modal === "create-project"
-                                  ? "New project"
-                                  : "Project context"}
+                        : modal === "quick-model"
+                          ? "Add or rename model"
+                          : modal === "add-model"
+                            ? "Add custom model"
+                            : modal === "queue-edit"
+                              ? "Edit queued prompt"
+                              : modal === "search"
+                                ? "Find your next step"
+                                : modal === "notifications"
+                                  ? "Activity"
+                                  : modal === "create-project"
+                                    ? "New project"
+                                    : "Project context"}
               </h2>
               <IconButton label="Close dialog" onClick={() => setModal("")}>
                 <X />
@@ -2204,7 +2497,59 @@ function App() {
                 </IconButton>
               </div>
             )}
-            {modal === "skills" ? (
+            {modal === "quick-model" ? (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void safe(async () => {
+                    setBusy(true);
+                    try {
+                      setCatalog(
+                        await api.invoke("models.save", {
+                          providerId: selectedProvider?.id,
+                          ...quickModel,
+                        }),
+                      );
+                      await refresh();
+                      setSelectedModel(quickModel.id);
+                      setModal("");
+                    } finally {
+                      setBusy(false);
+                    }
+                  });
+                }}
+              >
+                <p className="muted">
+                  Use the provider's exact model ID and any display name you
+                  prefer.
+                </p>
+                <label>
+                  Model ID
+                  <input
+                    required
+                    aria-label="Model ID"
+                    value={quickModel.id}
+                    onChange={(e) =>
+                      setQuickModel({ ...quickModel, id: e.target.value })
+                    }
+                  />
+                </label>
+                <label>
+                  Display name
+                  <input
+                    required
+                    aria-label="Display name"
+                    value={quickModel.name}
+                    onChange={(e) =>
+                      setQuickModel({ ...quickModel, name: e.target.value })
+                    }
+                  />
+                </label>
+                <button className="primary" disabled={busy}>
+                  Save model
+                </button>
+              </form>
+            ) : modal === "skills" ? (
               <SkillManager />
             ) : modal === "help" ? (
               <div className="command-help">
@@ -2224,6 +2569,16 @@ function App() {
               </div>
             ) : modal === "settings" ? (
               <>
+                <McpSettings
+                  onChange={(items) =>
+                    setMcpMentions(
+                      items.map((m) => ({
+                        id: `mcp:${m.name}`,
+                        description: m.location,
+                      })),
+                    )
+                  }
+                />
                 <div
                   className="setup-steps"
                   aria-label="Connection setup progress"
@@ -2470,9 +2825,45 @@ function App() {
                                 "provider-card " +
                                 (providerForm.model === m.id ? "selected" : "")
                               }
-                              onClick={() =>
-                                setProviderForm((f) => ({ ...f, model: m.id }))
-                              }
+                              onClick={() => {
+                                setProviderForm((f) => ({
+                                  ...f,
+                                  model: m.id,
+                                }));
+                                setProviderModels((current) =>
+                                  current.some((entry) => entry.id === m.id)
+                                    ? current
+                                    : [
+                                        ...current,
+                                        {
+                                          id: m.id,
+                                          name: m.name,
+                                          ...(m.reasoning !== undefined
+                                            ? { reasoning: m.reasoning }
+                                            : {}),
+                                          ...(m.image !== undefined
+                                            ? { image: m.image }
+                                            : {}),
+                                          ...(Array.isArray(m.variants)
+                                            ? {
+                                                variants: Object.fromEntries(
+                                                  m.variants.map(
+                                                    (effort: string) => [
+                                                      effort,
+                                                      {
+                                                        reasoningEffort: effort,
+                                                      },
+                                                    ],
+                                                  ),
+                                                ),
+                                              }
+                                            : m.variants
+                                              ? { variants: m.variants }
+                                              : {}),
+                                        },
+                                      ],
+                                );
+                              }}
                             >
                               <span>
                                 <strong>{m.name}</strong>
@@ -2702,9 +3093,19 @@ function App() {
                       }))
                     }
                   />
-                  Supports OpenAI-compatible reasoning effort (low / medium /
-                  high)
+                  Supports OpenAI-compatible reasoning effort
                 </label>
+                {modelForm.reasoning && (
+                  <label>
+                    Supported reasoning levels
+                    <input
+                      aria-label="Supported reasoning levels"
+                      value={modelEfforts}
+                      onChange={(e) => setModelEfforts(e.target.value)}
+                      placeholder="low, medium, high, xhigh, max"
+                    />
+                  </label>
+                )}
                 <label className="checkbox-label">
                   <input
                     type="checkbox"

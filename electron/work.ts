@@ -7,7 +7,8 @@ import type { WorkTask, WorkCheck } from "../src/shared";
 export function taskToolView(task: WorkTask) {
   return {
     ...task,
-    checkDetails: "Use read_command with a check's commandId for its command and output.",
+    checkDetails:
+      "Use read_command with a check's commandId for its command and output.",
     checks: task.checks.map(({ command, output, inputs, ...check }, index) => ({
       ...check,
       files: Object.keys(inputs),
@@ -58,14 +59,23 @@ export class WorkLedger {
     return task;
   }
   commandEvidence(sessionId: string, commandId: string) {
-    const check = this.list(sessionId).flatMap((task) => task.checks)
+    const check = this.list(sessionId)
+      .flatMap((task) => task.checks)
       .find((entry) => entry.commandId === commandId);
     if (!check) return undefined;
     return {
-      id: commandId, command: check.command, running: false, archived: true,
-      stdout: check.output, stderr: "", exitCode: check.exitCode,
-      timedOut: check.timedOut, durationMs: check.durationMs,
-      checkId: check.id, passed: check.passed, stale: check.stale,
+      id: commandId,
+      command: check.command,
+      running: false,
+      archived: true,
+      stdout: check.output,
+      stderr: "",
+      exitCode: check.exitCode,
+      timedOut: check.timedOut,
+      durationMs: check.durationMs,
+      checkId: check.id,
+      passed: check.passed,
+      stale: check.stale,
       inputs: check.inputs,
       note: "The recent command record expired. This is retained check evidence: combined stdout/stderr, limited to the last 12000 characters.",
     };
@@ -161,11 +171,12 @@ export class WorkLedger {
       missingCriteria: this.missing(task),
     }));
   }
-  interrupt() {
+  interrupt(sessionId?: string) {
     if (!this.read().some((task) => task.status === "running")) return;
     this.write(
       this.read().map((task) =>
-        task.status === "running"
+        task.status === "running" &&
+        (!sessionId || task.sessionId === sessionId)
           ? {
               ...task,
               status: "review",

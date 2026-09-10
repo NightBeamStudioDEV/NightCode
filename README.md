@@ -120,10 +120,19 @@ Integration tests use isolated local model fixtures and do not spend provider cr
 
 ## Project status
 
-Version 0.3.0 targets Windows x64. macOS/Linux packages, signed distribution, provider OAuth, cloud sync, and a third-party plugin marketplace are not included. Reasoning displays only what the provider exposes; they cannot reveal private internal reasoning. Throughput estimates are labeled when authoritative usage is unavailable.
+Version 0.4.0 targets Windows x64. macOS/Linux packages, signed distribution, provider OAuth, cloud sync, and a third-party plugin marketplace are not included. Reasoning displays only what the provider exposes; they cannot reveal private internal reasoning.
 
 [Report an issue](https://github.com/NightBeamStudioDEV/NightCode/issues) with a reproducible example and redacted logs.
 
 ## License
 
 [MIT](LICENSE). Dependencies retain their own licenses; see [third-party notices](THIRD_PARTY_NOTICES.md).
+
+
+## Version 0.4.0
+
+The Repository button beside Tasks & checks provides changes, branch switching/creation, comparison, staging, commit, and push. Commits include staged files; Stage all includes files in the selected project. Git mutations require idle conversations.
+
+Skills & toolkits share one searchable library. Toggle Bots view in the sidebar header for bot conversations and a conversational assistant; use Manage bots for profiles, schedules, memory, and connections.
+
+The model picker includes Refresh models and Add or rename model. Refresh discovers models from supported provider endpoints. Custom display names preserve the API model ID. Adding model configuration requires idle conversations.

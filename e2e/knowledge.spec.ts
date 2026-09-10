@@ -67,7 +67,9 @@ test("slash modes, skill discovery, batched tools and persistent goal through re
                 id: `call-${outputs.length}`,
                 type: "function",
                 function: {
-                  name: `nightcode_${entry[0]}`,
+                  name: body.tools.find((t: any) =>
+                    t.function.name.endsWith("_" + entry[0]),
+                  ).function.name,
                   arguments: JSON.stringify(entry[1]),
                 },
               },
@@ -152,12 +154,9 @@ test("slash modes, skill discovery, batched tools and persistent goal through re
     await expect(
       page.getByRole("region", { name: "Agent question" }),
     ).toBeVisible({ timeout: 60000 });
-    await expect(page.locator(".provider-reasoning")).toContainText(
-      "Provider reasoning",
+    await expect(page.locator(".reasoning-message")).toContainText(
+      "I need to clarify the camera before selecting controls.",
     );
-    await expect(page.locator(".generation-stats")).toContainText("tok/s");
-    await page.locator(".provider-reasoning > button").click();
-    await expect(page.locator(".reasoning-prose")).toContainText("I need to clarify the camera before selecting controls.");
     await page
       .getByRole("button", { name: "Third person", exact: true })
       .click();
@@ -188,11 +187,17 @@ test("slash modes, skill discovery, batched tools and persistent goal through re
       "updated\n",
     );
     await expect(page.locator(".goal-card")).toContainText("complete");
+    await expect(page.locator(".goal-achieved")).toContainText(
+      "Goal achieved.",
+    );
     const tools = requests
       .filter((r) => r.stream)
       .at(-1)
       .tools.map((t: any) => t.function.name);
-    for (const [name] of calls) expect(tools).toContain(`nightcode_${name}`);
+    for (const [name] of calls)
+      expect(
+        tools.some((tool: string) => tool.endsWith("_" + name)),
+      ).toBeTruthy();
     const outputs = requests
       .filter((r) => r.stream)
       .at(-1)

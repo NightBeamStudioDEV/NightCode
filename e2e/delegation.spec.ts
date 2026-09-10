@@ -20,18 +20,16 @@ test("delegates through isolated brokers, enforces ownership, and manages skills
     const body = JSON.parse(raw || "{}");
     requests.push(body);
     if (!body.stream) {
-      res
-        .writeHead(200, { "Content-Type": "application/json" })
-        .end(
-          JSON.stringify({
-            choices: [
-              {
-                message: { role: "assistant", content: "Delegation" },
-                finish_reason: "stop",
-              },
-            ],
-          }),
-        );
+      res.writeHead(200, { "Content-Type": "application/json" }).end(
+        JSON.stringify({
+          choices: [
+            {
+              message: { role: "assistant", content: "Delegation" },
+              finish_reason: "stop",
+            },
+          ],
+        }),
+      );
       return;
     }
     const outputs = (body.messages || []).filter((m: any) => m.role === "tool");
@@ -85,7 +83,9 @@ test("delegates through isolated brokers, enforces ownership, and manages skills
               id: `call-${outputs.length}`,
               type: "function",
               function: {
-                name: `nightcode_${call[0]}`,
+                name: body.tools.find((t: any) =>
+                  t.function.name.endsWith("_" + call[0]),
+                ).function.name,
                 arguments: JSON.stringify(call[1]),
               },
             },
@@ -133,7 +133,9 @@ test("delegates through isolated brokers, enforces ownership, and manages skills
     const p = await page.evaluate(() =>
       window.nightcode.invoke<any>("snapshot").then((s) => s.projects[0]),
     );
-    expect(p.roots).toEqual(await Promise.all([root, second].map((folder) => fs.realpath(folder))));
+    expect(p.roots).toEqual(
+      await Promise.all([root, second].map((folder) => fs.realpath(folder))),
+    );
     await page.evaluate(
       async ({ p, baseURL }) => {
         await window.nightcode.invoke("projects.update", {
@@ -161,12 +163,14 @@ test("delegates through isolated brokers, enforces ownership, and manages skills
     await page.getByRole("button", { name: /@team-check/ }).click();
     await input.fill("@team-check Delegate the asset change");
     await input.press("Enter");
+    await page.getByRole("button", { name: "Subagents", exact: true }).click();
     await expect(page.locator(".subagent-cards")).toContainText(
       "Update asset",
       { timeout: 60000 },
     );
     await page.locator(".subagent-cards button").click();
     await expect(page.locator(".spectator")).toBeVisible();
+    await page.keyboard.press("Escape");
     await expect(
       page.getByRole("button", { name: /Review file change/ }),
     ).toBeVisible({ timeout: 60000 });
@@ -192,7 +196,7 @@ test("delegates through isolated brokers, enforces ownership, and manages skills
     );
     await page.screenshot({ path: "test-results/subagent-spectator.png" });
     await page
-      .getByRole("button", { name: "Skills & workflows", exact: true })
+      .getByRole("button", { name: "Skills & toolkits", exact: true })
       .click();
     await page
       .getByRole("textbox", { name: "Search skills" })
@@ -213,27 +217,59 @@ test("delegates through isolated brokers, enforces ownership, and manages skills
     const box = await page.locator(".skills-modal").boundingBox();
     expect(box!.y).toBeGreaterThanOrEqual(0);
     expect(box!.y + box!.height).toBeLessThanOrEqual(600);
-    await page.locator(".skill-manager").evaluate(el => { el.scrollTop = el.scrollHeight; });
-    await expect(page.getByRole("button", { name: "Close dialog", exact: true })).toBeInViewport();
+    await page.locator(".skill-manager").evaluate((el) => {
+      el.scrollTop = el.scrollHeight;
+    });
+    await expect(
+      page.getByRole("button", { name: "Close dialog", exact: true }),
+    ).toBeInViewport();
     await page.screenshot({ path: "test-results/skills-responsive.png" });
     await page.getByRole("button", { name: "Add skill", exact: false }).click();
     await page.getByLabel("Skill name", { exact: true }).fill("ui-workflow");
-    await page.getByLabel("Description", { exact: true }).fill("Added through the UI");
-    await page.getByLabel("Instructions", { exact: true }).fill("Check resizing and input.");
+    await page
+      .getByLabel("Description", { exact: true })
+      .fill("Added through the UI");
+    await page
+      .getByLabel("Instructions", { exact: true })
+      .fill("Check resizing and input.");
     await page.getByRole("button", { name: "Save skill", exact: true }).click();
-    await expect(page.locator(".skill-reader")).toContainText("Check resizing and input.");
+    await expect(page.locator(".skill-reader")).toContainText(
+      "Check resizing and input.",
+    );
     await page.getByRole("button", { name: "Edit skill", exact: true }).click();
-    await page.getByLabel("Instructions", { exact: true }).fill("Check resizing, input, and audio.");
+    await page
+      .getByLabel("Instructions", { exact: true })
+      .fill("Check resizing, input, and audio.");
     await page.getByRole("button", { name: "Save skill", exact: true }).click();
-    await expect(page.locator(".skill-reader")).toContainText("input, and audio");
+    await expect(page.locator(".skill-reader")).toContainText(
+      "input, and audio",
+    );
     await page.keyboard.press("Escape");
-    await page.getByRole("button", { name: "Edit project Two folders", exact: true }).click();
-    await page.getByLabel("Project name", { exact: true }).fill("Renamed project");
-    await page.getByRole("button", { name: "Save project", exact: true }).click();
-    await expect(page.locator(".project-group-heading")).toContainText("Renamed project");
-    await page.getByRole("button", { name: "Edit project Renamed project", exact: true }).first().click();
-    await page.getByRole("button", { name: "Remove project", exact: true }).click();
-    await page.getByRole("button", { name: "Remove from NightCode", exact: true }).click();
+    await page
+      .getByRole("button", { name: "Edit project Two folders", exact: true })
+      .click();
+    await page
+      .getByLabel("Project name", { exact: true })
+      .fill("Renamed project");
+    await page
+      .getByRole("button", { name: "Save project", exact: true })
+      .click();
+    await expect(page.locator(".project-group-heading")).toContainText(
+      "Renamed project",
+    );
+    await page
+      .getByRole("button", {
+        name: "Edit project Renamed project",
+        exact: true,
+      })
+      .first()
+      .click();
+    await page
+      .getByRole("button", { name: "Remove project", exact: true })
+      .click();
+    await page
+      .getByRole("button", { name: "Remove from NightCode", exact: true })
+      .click();
     expect(await fs.readFile(path.join(second, "allowed.txt"), "utf8")).toBe(
       "updated",
     );

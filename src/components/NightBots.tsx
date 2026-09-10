@@ -142,67 +142,18 @@ export function NightBots({
       setConfirm("");
     });
   };
-  const capabilities = [
-    [
-      "Web search & reader",
-      "Search current sources and extract public webpages.",
-      "Built in",
-    ],
-    [
-      "Browser control",
-      "Navigate, click, type, read pages, and capture screenshots.",
-      "Built in",
-    ],
-    [
-      "Terminal & code",
-      "PowerShell commands; JavaScript and Python execution.",
-      "Local runtimes",
-    ],
-    [
-      "Files & patches",
-      "Read, search, replace, review edits, and move files.",
-      "Built in",
-    ],
-    [
-      "Memory & tasks",
-      "Persistent notes, acceptance criteria, and retained checks.",
-      "Built in",
-    ],
-    [
-      "Schedules & triggers",
-      "One-time jobs, recurring work, and file-change monitoring.",
-      "App open",
-    ],
-    [
-      "HTTP & secrets",
-      "Scoped encrypted keys, API requests, and redacted output.",
-      "Configure keys",
-    ],
-    [
-      "Email & calendar",
-      "Microsoft 365 mail, drafts, replies, sending, and events.",
-      "Graph token",
-    ],
-    [
-      "Documents & database",
-      "PDF, Word, Excel, CSV, and project SQLite queries.",
-      "Built in",
-    ],
-    [
-      "Vision & subagents",
-      "Images, browser screenshots, and bounded delegation.",
-      "Model dependent",
-    ],
-  ];
   return (
     <div className="nightbots-page">
       <header className="bots-heading">
         <div>
-          <span className="eyebrow">YOUR PERSONAL TEAM</span>
+          <span className="eyebrow">YOUR CONVERSATIONS</span>
           <h1>
             <Bot /> NightBots
           </h1>
-          <p>Give a bot a purpose. Keep its context. Follow its work.</p>
+          <p>
+            A familiar place to talk, explore ideas, and pick up where you left
+            off.
+          </p>
         </div>
         <button
           className="primary"
@@ -220,7 +171,6 @@ export function NightBots({
           ["schedules", "Schedules", Clock],
           ["memory", "Memory", Brain],
           ["connections", "Connections", KeyRound],
-          ["toolkit", "Toolkit", Globe],
         ].map(([id, label, Icon]: any) => (
           <button
             key={id}
@@ -854,27 +804,6 @@ export function NightBots({
               </button>
             </article>
           ))}
-        </>
-      )}
-      {tab === "toolkit" && (
-        <>
-          <h2>Tools for the whole task.</h2>
-          <p className="muted">
-            The same toolkit is available in coding conversations and NightBots.
-            Permissions and model capabilities still apply.
-          </p>
-          <div className="toolkit-grid">
-            {capabilities.map(([name, description, status]) => (
-              <article key={name}>
-                <div>
-                  <Check size={16} />
-                  <small>{status}</small>
-                </div>
-                <h3>{name}</h3>
-                <p>{description}</p>
-              </article>
-            ))}
-          </div>
         </>
       )}
     </div>

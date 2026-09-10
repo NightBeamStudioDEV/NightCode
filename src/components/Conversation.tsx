@@ -11,9 +11,11 @@ import {
   Zap,
 } from "lucide-react";
 import Markdown from "react-markdown";
+import { ToolResult } from "./ToolResult";
 import type { Message } from "../shared";
 import {
   activitySummary,
+  unresolvedFailures,
   buildFeed,
   effortColors,
   toolInfo,
@@ -29,30 +31,28 @@ const Prose = memo(function Prose({ text }: { text: string }) {
 });
 export const ConversationFeed = memo(function ConversationFeed({
   messages,
+  goalStatus,
 }: {
   messages: Message[];
+  goalStatus?: "active" | "complete" | "blocked";
 }) {
   const items = useMemo(() => buildFeed(messages), [messages]);
+  const failures = useMemo(() => unresolvedFailures(messages), [messages]);
   return (
     <>
       {items.map((item) =>
         item.reasoning ? (
-          <Disclosure
+          <article
             key={item.key}
-            className="provider-reasoning"
-            title={
-              item.streaming
-                ? "Provider reasoning · streaming"
-                : "Provider reasoning"
-            }
-            icon={item.streaming ? <Loader2 className="spin" /> : <Zap />}
-            active={item.streaming}
+            className="message assistant reasoning-message"
+            aria-label="Assistant thinking"
+            aria-busy={item.streaming}
           >
-            <div className="reasoning-prose">
-              <small>Reasoning text shared by this provider</small>
-              <Prose text={item.text!} />
-            </div>
-          </Disclosure>
+            <span className="reasoning-label">
+              {item.streaming ? "Thinking…" : "Thoughts"}
+            </span>
+            <Prose text={item.text!} />
+          </article>
         ) : item.tools ? (
           <ActivityGroup key={item.key} parts={item.tools} />
         ) : (
@@ -60,6 +60,19 @@ export const ConversationFeed = memo(function ConversationFeed({
             <Prose text={item.text!} />
           </article>
         ),
+      )}
+      {goalStatus !== "complete" && (
+        failures.length > 0 && (
+          <div className="run-outcome" role="status">
+            <X />
+            <span>
+              {failures.length}{" "}
+              {failures.length === 1 ? "action failed" : "actions failed"} without
+              a successful retry. Review the errors before relying on the
+              completion message.
+            </span>
+          </div>
+        )
       )}
     </>
   );
@@ -141,18 +154,7 @@ function ToolDetail({ part }: { part: Part }) {
         <span className="tool-status">
           {info.failed ? "Failed" : info.active ? "In progress" : "Completed"}
         </span>
-        {part.state?.input != null && (
-          <>
-            <h4>Input</h4>
-            <pre>{JSON.stringify(part.state.input, null, 2)}</pre>
-          </>
-        )}
-        {part.state?.output && (
-          <>
-            <h4>Output</h4>
-            <pre>{part.state.output}</pre>
-          </>
-        )}
+        <ToolResult part={part} />
         {part.state?.error && (
           <p className="activity-error">{part.state.error}</p>
         )}

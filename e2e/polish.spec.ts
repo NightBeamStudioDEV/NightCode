@@ -14,7 +14,7 @@ test("polished surfaces: activity grouping, reasoning colors, scroll stability a
       const model = {
         id: "model-one",
         name: "Muse Spark",
-        variants: ["minimal", "low", "medium", "high", "xhigh"],
+        variants: ["minimal", "low", "medium", "high", "xhigh", "max"],
       };
       const snapshot = {
         projects: [
@@ -28,7 +28,25 @@ test("polished surfaces: activity grouping, reasoning colors, scroll stability a
             updated: 1,
           },
         ],
+        subagents: [
+          {
+            id: "child",
+            parentId: "chat",
+            title: "Inspect UI",
+            role: "explore",
+            status: "running",
+            projectName: "NightCode",
+            branch: "codex/ui",
+            paths: ["src"],
+          },
+        ],
         providers: [
+          {
+            id: "second",
+            name: "DeepSeek",
+            model: "deepseek-test",
+            connected: true,
+          },
           {
             id: "provider",
             name: "OpenCode Go",
@@ -36,6 +54,21 @@ test("polished surfaces: activity grouping, reasoning colors, scroll stability a
             connected: true,
           },
         ],
+        tasks: [
+          {
+            id: "t1",
+            sessionId: "chat",
+            title: "Clean up chat",
+            status: "running",
+            criteria: ["Readable results"],
+            checks: [],
+            dependsOn: [],
+            revision: 1,
+          },
+        ],
+        progress: {
+          chat: [{ label: "Review the interface", status: "running" }],
+        },
         approvals: [],
         commands: [],
         drafts: {},
@@ -73,13 +106,36 @@ test("polished surfaces: activity grouping, reasoning colors, scroll stability a
             { type: "step-start" },
             {
               type: "tool",
-              tool: i < 3 ? "nightcode_propose_edit" : "nightcode_read_file",
+              tool:
+                i === 3
+                  ? "nightcode_run_code"
+                  : i < 3
+                    ? "nightcode_propose_edit"
+                    : "nightcode_read_file",
               state: {
                 status: i === 5 ? "running" : "completed",
                 input: {
+                  ...(i === 0
+                    ? {
+                        oldText: "const old = 1;\n",
+                        newText: "const updated = 2;\n",
+                      }
+                    : {}),
+                  ...(i === 3 ? { language: "python", code: "print(42)" } : {}),
                   path: `src/${["main.tsx", "style.css", "activity.ts", "shared.ts", "components/Conversation.tsx", "polish.css"][i]}`,
                 },
-                output: i === 5 ? undefined : "File updated and verified.",
+                output:
+                  i === 5
+                    ? undefined
+                    : i === 3
+                      ? JSON.stringify({
+                          command: "encoded launcher",
+                          started: 1,
+                          stdout: "42",
+                          stderr: "",
+                          exitCode: 0,
+                        })
+                      : "File updated and verified.",
               },
             },
           ],
@@ -99,6 +155,17 @@ test("polished surfaces: activity grouping, reasoning colors, scroll stability a
           if (action === "session.messages") return messages;
           if (action === "providers.list")
             return [
+              {
+                id: "second",
+                name: "DeepSeek",
+                models: [
+                  {
+                    id: "deepseek-test",
+                    name: "DeepSeek test",
+                    variants: ["high", "max"],
+                  },
+                ],
+              },
               {
                 id: "provider",
                 name: "OpenCode Go",
@@ -147,13 +214,67 @@ test("polished surfaces: activity grouping, reasoning colors, scroll stability a
     ).toBeLessThanOrEqual(32);
     await page.locator(".tool-record > button").first().click();
     await expect(page.locator(".tool-detail").first()).toBeVisible();
+    await expect(page.locator(".tool-diff .diff-added")).toContainText(
+      "const updated = 2;",
+    );
+    await page.locator(".tool-record > button").nth(3).click();
+    await expect(page.locator(".tool-code")).toContainText("print(42)");
+    await expect(page.locator(".command-result")).toContainText("Exit code 0");
+    await expect(page.locator(".command-result")).toContainText("42");
+    await expect(page.locator(".command-result")).not.toContainText(
+      "encoded launcher",
+    );
     await page.screenshot({
       path: "test-results/polished-activity.png",
       animations: "disabled",
     });
+    await expect(
+      page.locator(
+        ".conversation .work-panel, .conversation .step-list, .task-progress, .generation-stats",
+      ),
+    ).toHaveCount(0);
+    await page.getByRole("button", { name: /Tasks & checks/ }).click();
+    await expect(page.locator("#tasks-panel")).toContainText("Clean up chat");
+    await expect(page.locator("#tasks-panel")).toContainText(
+      "Review the interface",
+    );
+    await page.getByRole("button", { name: "Subagents", exact: true }).click();
+    await expect(page.locator("#subagents-panel")).toContainText("codex/ui");
+    await page.screenshot({
+      path: "test-results/chat-tasks-dark.png",
+      animations: "disabled",
+    });
+    await page.keyboard.press("Escape");
+    await expect(page.locator("#tasks-panel")).toHaveCount(0);
+    await page.getByRole("button", { name: "Toggle dark mode" }).click();
+    await page.getByRole("button", { name: /Tasks & checks/ }).click();
+    await expect(page.locator("#tasks-panel")).toHaveCSS(
+      "background-color",
+      "rgb(241, 244, 248)",
+    );
+    await expect(page.locator(".work-panel")).toHaveCSS(
+      "color",
+      "rgb(23, 34, 53)",
+    );
+    await page.screenshot({
+      path: "test-results/chat-tasks-light.png",
+      animations: "disabled",
+    });
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Toggle dark mode" }).click();
     await page.getByRole("button", { name: "Conversation model" }).click();
+    await page.getByLabel("Choose provider").selectOption("second");
+    await expect(page.locator(".model-list")).toContainText("DeepSeek test");
+    await page
+      .getByRole("button", { name: "Set max reasoning", exact: true })
+      .click();
+    await expect(page.getByRole("slider")).toHaveAttribute(
+      "aria-valuetext",
+      "max",
+    );
+    await page.getByLabel("Choose provider").selectOption("provider");
     const colors = new Set<string>();
-    for (const value of ["0", "1", "2", "3", "4", "5"]) {
+    for (const value of ["0", "1", "2", "3", "4", "5", "6"]) {
       await page.getByRole("slider", { name: "Reasoning effort" }).fill(value);
       colors.add(
         await page
@@ -163,7 +284,7 @@ test("polished surfaces: activity grouping, reasoning colors, scroll stability a
           ),
       );
     }
-    expect(colors.size).toBe(6);
+    expect(colors.size).toBe(7);
     await page
       .getByRole("button", { name: "Set high reasoning", exact: true })
       .click();

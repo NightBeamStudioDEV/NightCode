@@ -16,6 +16,10 @@ export interface Project {
   roots?: string[];
 }
 export interface Subagent {
+  projectName?: string;
+  projectPath?: string;
+  branch?: string;
+  paths?: string[];
   id: string;
   parentId: string;
   title: string;
@@ -131,6 +135,7 @@ export interface Snapshot {
     theme?: Theme;
   };
   activeSessionId?: string;
+  activeSessionIds?: string[];
   projects: Project[];
   sessions: Session[];
   providers: Provider[];

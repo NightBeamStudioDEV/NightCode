@@ -16,18 +16,16 @@ test("monitors commands and requires fresh real check evidence before completing
     const body = JSON.parse(raw || "{}");
     requests.push(body);
     if (!body.stream) {
-      res
-        .writeHead(200, { "Content-Type": "application/json" })
-        .end(
-          JSON.stringify({
-            choices: [
-              {
-                message: { role: "assistant", content: "Evidence task" },
-                finish_reason: "stop",
-              },
-            ],
-          }),
-        );
+      res.writeHead(200, { "Content-Type": "application/json" }).end(
+        JSON.stringify({
+          choices: [
+            {
+              message: { role: "assistant", content: "Evidence task" },
+              finish_reason: "stop",
+            },
+          ],
+        }),
+      );
       return;
     }
     const outputs = body.messages.filter((m: any) => m.role === "tool");
@@ -114,7 +112,9 @@ test("monitors commands and requires fresh real check evidence before completing
               id: `call-${outputs.length}`,
               type: "function",
               function: {
-                name: `nightcode_${call[0]}`,
+                name: body.tools.find((t: any) =>
+                  t.function.name.endsWith("_" + call[0]),
+                ).function.name,
                 arguments: JSON.stringify(call[1]),
               },
             },
@@ -203,15 +203,21 @@ test("monitors commands and requires fresh real check evidence before completing
     expect(snap.tasks[0].checks[1].exitCode).toBe(0);
     expect(snap.tasks[0].checks[1].timedOut).toBe(false);
     await expect(page.locator(".banner.error")).toHaveCount(0);
-    await page.locator(".work-item > summary").click();
-    await page.locator(".check-record > summary").last().click();
-    await expect(page.locator(".check-record").last()).toContainText("Exit code: 0");
+    await page.getByRole("button", { name: /Tasks & checks/ }).click();
+    await expect(page.locator("#tasks-panel")).toBeVisible();
+    await page.locator("#tasks-panel .work-item > summary").click();
+    await page.locator("#tasks-panel .check-record > summary").last().click();
+    await expect(page.locator("#tasks-panel .check-record").last()).toContainText(
+      "Exit code: 0",
+    );
     await page.screenshot({ path: "test-results/task-verification.png" });
+    await page.keyboard.press("Escape");
     await fs.writeFile(path.join(project, "hello.txt"), "external change");
+    await page.getByRole("button", { name: /Tasks & checks/ }).click();
     await page
       .getByRole("button", { name: "Recheck evidence", exact: true })
       .click();
-    await expect(page.locator(".work-item > summary")).toContainText(
+    await expect(page.locator("#tasks-panel .work-item > summary")).toContainText(
       "Needs review",
     );
     expect(
@@ -219,14 +225,25 @@ test("monitors commands and requires fresh real check evidence before completing
         await page.evaluate(() => window.nightcode.invoke<any>("snapshot"))
       ).commands.every((c: any) => !c.running),
     ).toBe(true);
-    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(835, 660));
-    await expect(page.getByPlaceholder("Ask NightCode to build, fix, or explore…")).toBeInViewport();
-    await page.screenshot({ path: "test-results/task-verification-compact.png" });
+    await app.evaluate(({ BrowserWindow }) =>
+      BrowserWindow.getAllWindows()[0].setSize(835, 660),
+    );
+    await expect(
+      page.getByPlaceholder("Ask NightCode to build, fix, or explore…"),
+    ).toBeInViewport();
+    await page.screenshot({
+      path: "test-results/task-verification-compact.png",
+    });
     await app.close();
-    app = await electron.launch({ args: ["."], env: { ...process.env, NIGHTCODE_TEST_DATA: data } });
+    app = await electron.launch({
+      args: ["."],
+      env: { ...process.env, NIGHTCODE_TEST_DATA: data },
+    });
     const restored = await app.firstWindow();
     await restored.locator("h1").waitFor();
-    const saved = await restored.evaluate(() => window.nightcode.invoke<any>("snapshot"));
+    const saved = await restored.evaluate(() =>
+      window.nightcode.invoke<any>("snapshot"),
+    );
     expect(saved.tasks[0].status).toBe("review");
     expect(saved.tasks[0].checks).toHaveLength(2);
   } finally {

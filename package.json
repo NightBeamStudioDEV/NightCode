@@ -1,6 +1,6 @@
 {
   "name": "nightcode-desktop",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "description": "A desktop coding workspace with visible progress, reviewable changes, and evidence-backed tasks",
   "author": "NightBeam Studio",
@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.3.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@opencode-ai/plugin": "1.18.29",
     "@opencode-ai/sdk": "1.18.29",
     "diff": "^9.0.0",

@@ -1,5 +1,13 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 const allowed = new Set([
+  "git.status",
+  "git.action",
+  "models.save",
+  "models.refresh",
+  "mcp.list",
+  "mcp.save",
+  "mcp.remove",
+  "mcp.test",
   "bots.list",
   "bots.save",
   "bots.remove",

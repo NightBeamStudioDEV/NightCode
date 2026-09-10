@@ -43,13 +43,17 @@ export class Subagents {
     prompt: string,
     model: { providerID: string; modelID: string },
     call: (name: string, input: unknown) => Promise<unknown>,
+    context: Pick<
+      Subagent,
+      "projectName" | "projectPath" | "branch" | "paths"
+    > = {},
   ) {
     if (
       this.list().filter((c) => ["starting", "running"].includes(c.status))
-        .length >= 2
+        .length >= 4
     )
       throw new Error(
-        "Two subagents are already working. Wait for one to finish.",
+        "Four subagents are already working. Wait for one to finish.",
       );
     if (this.list().filter((c) => c.parentId === parentId).length >= 12)
       throw new Error(
@@ -65,7 +69,7 @@ export class Subagents {
     );
     let finish!: () => void;
     const child: Child = {
-      view: { id, parentId, title, role, status: "starting" },
+      view: { id, parentId, title, role, status: "starting", ...context },
       broker,
       engine: undefined!,
       messages: [],
@@ -222,7 +226,8 @@ export class Subagents {
     c.finish();
     this.changed();
   }
-  stopAll() {
-    for (const id of this.children.keys()) this.stop(id);
+  stopAll(parentId?: string) {
+    for (const [id, child] of this.children)
+      if (!parentId || child.view.parentId === parentId) this.stop(id);
   }
 }

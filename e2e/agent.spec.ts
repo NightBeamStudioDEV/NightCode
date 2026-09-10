@@ -146,22 +146,6 @@ test("real engine routes tool calls through edit and command approvals", async (
         "base64",
       ),
     );
-    await expect(
-      page.evaluate(
-        ({ id, imageFile }) =>
-          window.nightcode.invoke("session.send", {
-            id,
-            text: "Describe this image",
-            providerId: "fixture",
-            model: "fixture",
-            mode: "Code",
-            attachments: [
-              { path: imageFile, name: "image.png", kind: "image" },
-            ],
-          }),
-        { id: s.id, imageFile },
-      ),
-    ).rejects.toThrow("image support");
     await page
       .getByRole("button", { name: "New conversation", exact: true })
       .click();
@@ -221,7 +205,7 @@ test("real engine routes tool calls through edit and command approvals", async (
         ),
       )
       .toBeTruthy();
-    expect(toolNames).toContain("nightcode_propose_edit");
+    expect(toolNames.some((tool) => tool.endsWith("_propose_edit"))).toBeTruthy();
     expect(toolNames).not.toContain("bash");
     expect(toolNames).not.toContain("edit");
     await expect(page.locator(".terminal-panel")).toHaveCount(0);

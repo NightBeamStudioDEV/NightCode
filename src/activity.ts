@@ -38,7 +38,10 @@ export function buildFeed(messages: Message[]): FeedItem[] {
 }
 
 export function toolInfo(part: Part) {
-  const name = (part.tool || "action").replace(/^nightcode_/, "");
+  const name = (part.tool || "action").replace(
+    /^nightcode_(?:[a-f0-9]{10}_)?/,
+    "",
+  );
   const input = (part.state?.input || {}) as Record<string, unknown>;
   const failed = part.state?.status === "error";
   const active = !["completed", "error"].includes(part.state?.status || "");
@@ -60,7 +63,7 @@ export function toolInfo(part: Part) {
                   ? "inspect"
                   : /edit|write|replace/.test(name)
                     ? "edit"
-                    : /command|bash|shell/.test(name)
+                    : /command|bash|shell|run_code/.test(name)
                       ? "command"
                       : /read/.test(name)
                         ? "read"
@@ -100,12 +103,12 @@ export function toolInfo(part: Part) {
   const detail = String(
     input.title ||
       input.question ||
-      input.id ||
       input.command ||
       input.path ||
       input.filePath ||
       input.pattern ||
       input.query ||
+      (name === "run_code" ? `${input.language || ""} code`.trim() : "") ||
       (kind === "action" ? name.replaceAll("_", " ") : ""),
   );
   return {
@@ -162,3 +165,28 @@ export const effortColors: Record<string, string> = {
   max: "#ee839f",
   ultra: "#ee839f",
 };
+/** Failed calls from the latest user turn, cleared only by a successful retry
+ * of the same tool and target. Assistant prose is never execution evidence. */
+export function unresolvedFailures(messages: Message[]): Part[] {
+  const failures = new Map<string, Part>();
+  for (const message of messages) {
+    if (message.role === "user") failures.clear();
+    for (const part of message.parts) {
+      if (part.type !== "tool") continue;
+      const input = (part.state?.input || {}) as Record<string, unknown>;
+      const key = JSON.stringify([
+        part.tool,
+        input.path ??
+          input.filePath ??
+          input.id ??
+          input.command ??
+          input.tool ??
+          input.question ??
+          "",
+      ]);
+      if (part.state?.status === "error") failures.set(key, part);
+      else if (part.state?.status === "completed") failures.delete(key);
+    }
+  }
+  return [...failures.values()];
+}

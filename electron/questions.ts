@@ -60,15 +60,17 @@ export class QuestionQueue {
     item.resolve({ status: "answered", answer: text });
     this.changed();
   }
-  cancelAll() {
-    for (const item of this.pending.values()) {
+  cancelAll(sessionId?: string) {
+    for (const [id, item] of this.pending) {
+      if (sessionId && item.question.sessionId !== sessionId) continue;
+      this.pending.delete(id);
       clearTimeout(item.timer);
       item.resolve({
         status: "cancelled",
         reason: "Task interrupted. No answer was provided.",
       });
     }
-    this.pending.clear();
+
     this.changed();
   }
   cancelAgent(agentId: string) {

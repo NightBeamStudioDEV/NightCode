@@ -62,7 +62,10 @@ export function SubagentPanel({ agents }: { agents: Subagent[] }) {
               <strong>{a.title}</strong>
               <small>
                 {a.role} · {a.status}
+                {a.projectName && ` · ${a.projectName}`}
+                {a.branch && ` · ${a.branch}`}
               </small>
+              {a.progress && <small>{a.progress}</small>}
             </span>
             <span>↗</span>
           </button>
@@ -86,6 +89,13 @@ export function SubagentPanel({ agents }: { agents: Subagent[] }) {
             )}
             <button onClick={() => setSelected("")}>Close</button>
           </div>
+          <p className="agent-context">
+            {agent.projectPath}
+            {agent.branch ? ` · ${agent.branch}` : ""}
+          </p>
+          {!!agent.paths?.length && (
+            <p className="agent-context">Owns: {agent.paths.join(", ")}</p>
+          )}
           {error && <p role="alert">{error}</p>}
           <div className="spectator-feed">
             <ConversationFeed messages={messages} />

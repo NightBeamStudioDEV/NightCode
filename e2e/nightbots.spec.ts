@@ -66,7 +66,9 @@ test("NightBots creates profiles and drives a sandboxed browser through reviewed
                 id: "call-" + outputs.length,
                 type: "function",
                 function: {
-                  name: "nightcode_" + call[0],
+                  name: b.tools.find((t: any) =>
+                    t.function.name.endsWith("_" + call[0]),
+                  ).function.name,
                   arguments: JSON.stringify(call[1]),
                 },
               },
@@ -93,11 +95,13 @@ test("NightBots creates profiles and drives a sandboxed browser through reviewed
   });
   try {
     const page = await app.firstWindow();
-    page.on('pageerror',e=>console.log('Renderer error:',e.message));
+    page.on("pageerror", (e) => console.log("Renderer error:", e.message));
     await expect(
       page.getByRole("heading", { name: "Welcome to NightCode Desktop" }),
     ).toBeVisible();
-    await expect(page.locator(".nav-bot-mark")).toBeVisible();
+    await expect(
+      page.getByRole("switch", { name: "Bots view" }).locator("svg"),
+    ).toBeVisible();
     await page.getByRole("button", { name: "Toggle dark mode" }).click();
     await expect
       .poll(() => page.locator("html").getAttribute("data-theme"))
@@ -135,9 +139,7 @@ test("NightBots creates profiles and drives a sandboxed browser through reviewed
     const project = await page.evaluate(() =>
       window.nightcode.invoke<any>("projects.open"),
     );
-    await page
-      .getByRole("button", { name: "NightBots Bots", exact: true })
-      .click();
+    await page.getByRole("switch", { name: "Bots view", exact: true }).click();
     await page.getByRole("button", { name: "Create bot", exact: true }).click();
     await page.getByLabel("Name", { exact: true }).fill("Research Bot");
     await page
@@ -258,7 +260,7 @@ test("NightBots creates profiles and drives a sandboxed browser through reviewed
       .getByRole("button", { name: "Close browser", exact: true })
       .click();
     await page
-      .getByRole("button", { name: "NightBots Bots", exact: true })
+      .getByRole("button", { name: "Manage bots", exact: true })
       .click();
     await page.setViewportSize({ width: 820, height: 650 });
     await page.screenshot({ path: "test-results/nightbots-small.png" });
